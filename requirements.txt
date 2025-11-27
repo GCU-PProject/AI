@@ -1,4 +1,3 @@
 fastapi
 uvicorn[standard]
-boto3
-opensearch-py
+google-cloud-aiplatform
