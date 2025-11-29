@@ -1,4 +1,6 @@
 fastapi
 uvicorn[standard]
-boto3
-opensearch-py
+google-cloud-aiplatform
+sqlalchemy[asyncio]
+asyncpg
+python-dotenv
