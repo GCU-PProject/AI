@@ -3,4 +3,5 @@ uvicorn[standard]
 google-cloud-aiplatform
 sqlalchemy[asyncio]
 asyncpg
+pgvector
 python-dotenv
