@@ -40,9 +40,6 @@ def test_connection():
 
     except OperationalError as e:
         print("\n❌ [실패] 데이터베이스 연결에 실패했습니다.")
-        print("   [체크리스트]")
-        print("   1. 터널링 터미널이 켜져 있나요?")
-        print("   2. .env 파일의 DB_PASSWORD가 정확한가요?")
         print(f"   에러 내용: {e}")
     except Exception as e:
         print("\n❌ [오류] 알 수 없는 오류가 발생했습니다.")
