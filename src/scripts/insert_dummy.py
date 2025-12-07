@@ -13,7 +13,7 @@ sys.path.append(
 )
 
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy import (
     Column,
     Integer,
@@ -30,37 +30,14 @@ from vertexai.language_models import TextEmbeddingModel, TextEmbeddingInput
 import vertexai
 from dotenv import load_dotenv
 
+from src.core.database import Base
+from src.core.models import Law
+
 # .env 파일 로드 (DB 정보, GCP 정보 가져오기)
 load_dotenv()
 
 # DB 접속 URL 생성
 DATABASE_URL = f"postgresql+asyncpg://{os.getenv('DB_USER')}:{os.getenv('DB_PASSWORD')}@{os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}/{os.getenv('DB_NAME')}"
-
-Base = declarative_base()
-
-
-# 2. DB 테이블 모델 정의 (ERD와 100% 일치 + 벡터 컬럼)
-class Law(Base):
-    __tablename__ = "test_laws"
-
-    # 기본키
-    law_id = Column(BigInteger, primary_key=True, autoincrement=True)
-
-    # ERD 컬럼들
-    country_id = Column(BigInteger)
-    law_title = Column(String)
-    category = Column(String)
-    article_no = Column(String)
-    content = Column(Text)
-    enactment_date = Column(DateTime)
-    amendment_date = Column(DateTime)
-
-    # 시스템 컬럼 (자동 입력)
-    created_at = Column(DateTime, server_default=func.now())
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
-
-    # ★ AI용 벡터 컬럼 (Google Gecko 모델은 768차원입니다)
-    embedding = Column(Vector(768))
 
 
 async def insert_data():
