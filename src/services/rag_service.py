@@ -19,7 +19,7 @@ def get_models():
 
     # 모델 로드
     embedding_model = TextEmbeddingModel.from_pretrained("text-embedding-005")
-    model_name = settings.GCP_MODEL_NAME or "gemini-1.5-flash-001"
+    model_name = settings.GCP_MODEL_NAME
     generative_model = GenerativeModel(model_name)
 
     return embedding_model, generative_model

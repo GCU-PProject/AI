@@ -1,4 +1,4 @@
-# src/api/v1/endpoints/chat.py 수정 제안
+# src/api/v1/endpoints/chat.py
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.database import get_db  # 👈 DB 세션 의존성 가져오기
