@@ -1,23 +1,24 @@
+# src/services/rag_service.py
 import os
 from typing import List, Dict, Any
 import vertexai
 from vertexai.language_models import TextEmbeddingModel, TextEmbeddingInput
 from vertexai.generative_models import GenerativeModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from src.core.models import Law
+from sqlalchemy import select, label
+from src.core.models import Law  # Law 모델이 src/core/models에 있다고 가정
 from src.core.config import settings
-from sqlalchemy import select, label  # 거리 계산 추가 코드
 
 
 # 모델 로드 (함수 호출 시마다 로드하지 않도록 전역 변수 처리 고려 가능)
 def get_models():
+
     # GCP 프로젝트 설정
+    # settings.GCP_PROJECT_ID와 settings.GCP_LOCATION은 .env에서 읽어옴
     vertexai.init(project=settings.GCP_PROJECT_ID, location=settings.GCP_LOCATION)
 
     # 모델 로드
     embedding_model = TextEmbeddingModel.from_pretrained("text-embedding-005")
-    # settings에 모델명이 없으면 기본값 사용
     model_name = settings.GCP_MODEL_NAME or "gemini-1.5-flash-001"
     generative_model = GenerativeModel(model_name)
 
@@ -34,38 +35,19 @@ async def generate_answer(query: str, db: AsyncSession) -> Dict[str, Any]:
         query_vector = embeddings[0].values
     except Exception as e:
         print(f"❌ 임베딩 실패: {e}")
+        # Vertex AI 통신 오류가 여기서 발생할 가능성이 높음
         raise e
 
     # 2. [검색] DB에서 유사한 법률 조항 1개 찾기
-    # l2_distance (유클리드 거리) 기준으로 정렬
-    stmt = select(
-        Law, Law.embedding.l2_distance(query_vector).label("distance")
-    ).order_by(
-        Law.embedding.l2_distance(query_vector)
-    )  # .limit(1) 제외(거리 계산 추가 코드)
-    if law.country_code:  # 사용자가 "KR"을 선택했거나 질문에서 추출했다면
-        stmt = stmt.where(
-            Law.country_code == law.country_code
-        )  # ★ 핵심: 한국 법만 남김!
+    # Law 모델에는 embedding 컬럼이 pgvector.sqlalchemy.Vector 타입이라고 가정
+    stmt = (
+        select(Law, Law.embedding.l2_distance(query_vector).label("distance"))
+        .order_by(Law.embedding.l2_distance(query_vector))
+        .limit(1)
+    )
+
     result = await db.execute(stmt)
-    rows = result.all()  # 거리 계산 추가 코드
-    # laws = result.scalars().all() : 거리 계산 코드를 위해 삭제
-
-    # ---------------------------------------------------------
-    # 📊 [로그 출력] 여기서 점수를 확인하세요!
-    # ---------------------------------------------------------
-    print(f"\n🔎 [유사도 측정] 질문: '{query}'")
-    print("=" * 60)
-    for i, row in enumerate(rows):
-        law = row[0]
-        distance = row[1]
-        print(f"{i+1}. 거리: {distance:.5f} | {law.law_title} {law.article_no}")
-        print(f"   내용: {law.content[:30]}...")  # 내용도 보고 싶으면 주석 해제
-    print("=" * 60 + "\n")
-    # ---------------------------------------------------------
-
-    # 3. [로직] 일단 가장 가까운(0번) 1개만 선택해서 답변 생성
-    # (나중에 여기서 Threshold 로직을 적용하면 됩니다)
+    rows = result.all()
 
     if not rows:
         return {
@@ -76,7 +58,7 @@ async def generate_answer(query: str, db: AsyncSession) -> Dict[str, Any]:
 
     # 가장 가까운 1개 선택
     top_law = rows[0][0]
-    top_distance = rows[0][1]
+    # top_distance = rows[0][1] # Threshold 로직은 나중에 추가
 
     # 4. [프롬프트]
     context_text = f"- [{top_law.law_title} {top_law.article_no}]: {top_law.content}\n"
@@ -108,7 +90,7 @@ async def generate_answer(query: str, db: AsyncSession) -> Dict[str, Any]:
         final_answer = response.text
     except Exception as e:
         print(f"❌ Gemini 호출 실패: {e}")
-        final_answer = "AI 모델 호출 중 오류가 발생했습니다."
+        raise e  # 에러를 다시 던져서 API 엔드포인트에서 처리하도록 함
 
     # 6. 결과 반환
     return {

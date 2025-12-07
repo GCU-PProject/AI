@@ -1,23 +1,10 @@
+# src/schemas/chat.py
 from pydantic import BaseModel
-from typing import List, Optional, Any
+from typing import Optional
 
 
-# [Request] 백엔드에서 받을 질문
+# /api/v1/chat 엔드포인트로 들어오는 요청 데이터 구조
 class ChatRequest(BaseModel):
     query: str
-    country_code: Optional[str] = None
-
-
-# [Result] 성공 시 result 안에 들어갈 알맹이 데이터
-class ChatResult(BaseModel):
-    answer: str
-    related_law_id_list: List[int]
-    search_success: bool
-
-
-# [Response] 최종 응답 껍데기 (팀 공통 포맷)
-class CommonResponse(BaseModel):
-    isSuccess: bool
-    code: str
-    message: str
-    result: Optional[ChatResult] = None
+    # 요청 바디에 country_code를 포함하여 DB 검색 필터링에 사용할 수 있도록 합니다.
+    country_code: Optional[str] = None  # 예: "KR", "US". Null 가능하도록 Optional 설정
