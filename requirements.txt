@@ -5,5 +5,6 @@ sqlalchemy[asyncio]
 asyncpg
 pgvector
 python-dotenv
+psycopg2-binary
 black
 ruff

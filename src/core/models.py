@@ -5,7 +5,7 @@ from src.core.database import Base
 
 
 class Law(Base):
-    __tablename__ = "laws"
+    __tablename__ = "test_laws"
 
     law_id = Column(BigInteger, primary_key=True, autoincrement=True)
     country_id = Column(BigInteger)
