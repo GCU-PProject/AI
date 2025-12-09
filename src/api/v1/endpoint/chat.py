@@ -8,8 +8,10 @@ from src.schemas.response import (
     ChatResult,
 )  # 👈 ChatResult 스키마 가져오기
 from src.services.rag_service import generate_answer  # 👈 RAG 서비스 함수 가져오기
+import logging
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 # ⚠️ 기존 테스트용 /chat 엔드포인트 (유지)
@@ -48,9 +50,10 @@ async def chat_endpoint(
 
     except Exception as e:
         # Vertex AI, 임베딩, DB 연결 등 모든 서버 내부 오류 처리
+        logger.exception("Chat endpoint error")
         return CommonResponse(
             isSuccess=False,
             code="AI500",
-            message=f"서버 내부 오류: {str(e)}",
+            message="서버 내부 오류가 발생했습니다.",
             result=None,
         )
