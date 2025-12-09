@@ -1,7 +1,6 @@
 # src/core/models.py
 from sqlalchemy import (
     Column,
-    Integer,
     String,
     Text,
     DateTime,
