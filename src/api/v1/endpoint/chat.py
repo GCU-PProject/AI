@@ -33,7 +33,7 @@ async def chat_endpoint(
     """
     법률 Q&A 챗봇 API (RAG)
     - query: 사용자 질문
-    - country_code: (선택) 국가 코드 (예: KR, US, GB)
+    - country_id: 국가 ID (예: 1: 한국, 2: 영국, 3: 싱가포르)
     """
     try:
         # 서비스 로직 호출: DB 세션을 generate_answer 함수에 전달
