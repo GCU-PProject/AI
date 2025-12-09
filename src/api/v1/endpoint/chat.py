@@ -2,11 +2,9 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.database import get_db  # 👈 DB 세션 의존성 가져오기
-from src.schemas.chat import ChatRequest
-from src.schemas.response import (
-    CommonResponse,
-    ChatResult,
-)  # 👈 ChatResult 스키마 가져오기
+from src.schemas.common import CommonResponse
+from src.schemas.chat import ChatRequest, ChatResult
+from src.schemas.compare import CompareRequest, CompareResult
 from src.services.rag_service import generate_answer  # 👈 RAG 서비스 함수 가져오기
 
 router = APIRouter()
