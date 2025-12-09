@@ -30,10 +30,14 @@ async def chat_endpoint(
 ):
     """
     법률 Q&A 챗봇 API (RAG)
+    - query: 사용자 질문
+    - country_code: (선택) 국가 코드 (예: KR, US, GB)
     """
     try:
         # 서비스 로직 호출: DB 세션을 generate_answer 함수에 전달
-        result_data = await generate_answer(request.query, db)
+        result_data = await generate_answer(
+            query=request.query, db=db, country_id=request.country_id
+        )
 
         # Pydantic 모델로 변환 (ChatResult는 response.py에 정의되어 있어야 함)
         chat_result = ChatResult(**result_data)

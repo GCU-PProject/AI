@@ -6,7 +6,7 @@ from vertexai.language_models import TextEmbeddingModel, TextEmbeddingInput
 from vertexai.generative_models import GenerativeModel, GenerationConfig
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, label
-from src.core.models import Law
+from src.core.models import Law, Country
 from src.core.config import settings
 
 # Top-K 설정: 가장 유사한 법률 3개를 가져옵니다
@@ -32,8 +32,15 @@ def get_models():
     return embedding_model, generative_model
 
 
-async def generate_answer(query: str, db: AsyncSession) -> Dict[str, Any]:
+async def generate_answer(
+    query: str, db: AsyncSession, country_id: int
+) -> Dict[str, Any]:
     embedding_model, generative_model = get_models()
+
+    # 0. [전처리] 국가 코드
+    target_country_id = country_id
+
+    print(f"🌍 국가 필터링 적용: ID {country_id}")
 
     # 1. [임베딩] 질문을 벡터로 변환
     try:
@@ -47,8 +54,10 @@ async def generate_answer(query: str, db: AsyncSession) -> Dict[str, Any]:
 
     # 2. [검색] DB에서 유사한 법률 조항 Top-K개 찾기
     # Law 모델에는 embedding 컬럼이 pgvector.sqlalchemy.Vector 타입이라고 가정
+    # 기본 쿼리: Law 테이블과 거리 계산
     stmt = (
         select(Law, Law.embedding.l2_distance(query_vector).label("distance"))
+        .where(Law.country_id == target_country_id)
         .order_by(Law.embedding.l2_distance(query_vector))
         .limit(TOP_K)
     )
