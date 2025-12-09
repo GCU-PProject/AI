@@ -17,7 +17,7 @@ from src.core.models import Law
 from src.core.config import settings
 
 # ✅ rag_service에서 모델 로드 함수와 설정을 그대로 가져옵니다. (로직 일치 보장)
-from src.services.rag_service import get_models, MAX_DISTANCE_THRESHOLD
+from services.chat_service import get_models, MAX_DISTANCE_THRESHOLD
 
 load_dotenv()
 

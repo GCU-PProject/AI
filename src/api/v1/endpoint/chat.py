@@ -5,7 +5,7 @@ from src.core.database import get_db  # 👈 DB 세션 의존성 가져오기
 from src.schemas.common import CommonResponse
 from src.schemas.chat import ChatRequest, ChatResult
 from src.schemas.compare import CompareRequest, CompareResult
-from src.services.rag_service import generate_answer  # 👈 RAG 서비스 함수 가져오기
+from services.chat_service import generate_answer  # 👈 RAG 서비스 함수 가져오기
 
 router = APIRouter()
 
