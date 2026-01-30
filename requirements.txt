@@ -8,3 +8,7 @@ python-dotenv
 psycopg2-binary
 black
 ruff
+requests
+beautifulsoup4
+pymysql
+pydantic-settings
