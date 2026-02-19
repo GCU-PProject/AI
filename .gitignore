@@ -15,3 +15,6 @@ env/
 # GCP Credentials
 keys/
 *.json
+
+# Large Data Files
+*.jsonl
