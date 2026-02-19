@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     # (참고) 나중에 FastAPI에서 비동기(Async)가 필요하면 이걸 쓰세요.
     @property
     def ASYNC_DATABASE_URL(self) -> str:
-        return f"postgresql+asyncpg://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}?sslmode=require"
+        return f"postgresql+asyncpg://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}?ssl=require"
 
     # 3. Psycopg2용 파라미터 (크롤러 스크립트용)
     @property
