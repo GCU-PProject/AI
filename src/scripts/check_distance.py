@@ -17,7 +17,7 @@ from src.core.models import Law
 from src.core.config import settings
 
 # ✅ rag_service에서 모델 로드 함수와 설정을 그대로 가져옵니다. (로직 일치 보장)
-from src.services.rag_service import get_models, MAX_DISTANCE_THRESHOLD
+from src.services.chat_service import get_models, MAX_DISTANCE_THRESHOLD
 
 load_dotenv()
 
@@ -46,7 +46,7 @@ async def check_distance():
         text_input = TextEmbeddingInput(text=TEST_QUERY, task_type="RETRIEVAL_QUERY")
         embeddings = embedding_model.get_embeddings([text_input])
         query_vector = embeddings[0].values
-    except Exception as e:
+    except (ValueError, RuntimeError) as e:
         print(f"❌ 임베딩 실패: {e}")
         return
 
@@ -82,7 +82,8 @@ async def check_distance():
             law_title = row[0]
             article_no = row[1]
             # 보기 좋게 줄바꿈 제거 및 길이 제한
-            content = row[2][:40].replace("\n", " ") + "..."
+            raw_content = row[2] or ""
+            content = raw_content[:40].replace("\n", " ") + "..."
             distance = row[3]
 
             # 시각적 표시 (PASS / FAIL)

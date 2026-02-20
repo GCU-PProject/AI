@@ -3,6 +3,25 @@ from pydantic import BaseModel
 from typing import Optional, Any, List
 
 
+# 개별 국가 검색 결과 요약
+class CountryResult(BaseModel):
+    related_law_ids: List[int]  # 근거 법률 ID 목록
+    summary: str  # 해당 국가 법률 요약
+
+
+# 비교 분석 결과 (공통점/차이점)
+class CompareAnalysis(BaseModel):
+    common: str  # 공통점
+    diff: str  # 차이점
+
+
+# 최종 비교 응답 데이터 구조
+class CompareResponseResult(BaseModel):
+    country_1_result: CountryResult
+    country_2_result: CountryResult
+    compare_summary: CompareAnalysis
+
+
 # RAG 서비스의 성공적인 결과 데이터 구조
 class ChatResult(BaseModel):
     answer: str  # Gemini LLM이 생성한 최종 답변 텍스트
