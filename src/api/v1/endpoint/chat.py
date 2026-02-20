@@ -9,6 +9,7 @@ from src.services.chat_service import generate_answer
 from src.services.compare_service import compare_laws
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 # ⚠️ 기존 테스트용 /chat 엔드포인트 (유지)
@@ -27,7 +28,7 @@ async def chat_endpoint(request: ChatRequest, db: AsyncSession = Depends(get_db)
     """
     법률 Q&A 챗봇 API
     - query: 사용자 질문
-    - country_code: (선택) 국가 코드 (예: KR, US, GB)
+    - country_id: 국가 ID (예: 1: 한국, 2: 영국, 3: 싱가포르)
     """
     try:
         result_data = await generate_answer(
@@ -41,10 +42,12 @@ async def chat_endpoint(request: ChatRequest, db: AsyncSession = Depends(get_db)
         )
 
     except Exception as e:
+        # Vertex AI, 임베딩, DB 연결 등 모든 서버 내부 오류 처리
+        logger.exception("Chat endpoint error")
         return CommonResponse(
             isSuccess=False,
             code="AI500",
-            message=f"서버 내부 오류: {str(e)}",
+            message="서버 내부 오류가 발생했습니다.",
             result=None,
         )
 

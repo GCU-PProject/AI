@@ -1,27 +1,22 @@
+import sys
 import os
-from dotenv import load_dotenv
+
+# dirname을 3번 중첩해서 루트까지
+sys.path.append(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+)
+
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import OperationalError
 
-# 1. .env 파일 로드
-load_dotenv()
+from src.core.config import settings
 
-# 2. 환경 변수 가져오기
-DB_USER = os.getenv("DB_USER")
-DB_PASSWORD = os.getenv("DB_PASSWORD")
-DB_HOST = os.getenv("DB_HOST")
-DB_PORT = os.getenv("DB_PORT")
-DB_NAME = os.getenv("DB_NAME")
-
-# 3. DB URL 생성
-# 포맷: postgresql://아이디:비번@주소:포트/DB이름
-# 뒤에 ?sslmode=require 추가 (보안 연결 강제 설정)
-DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}?sslmode=require"  # disable
+DATABASE_URL = settings.DATABASE_URL
 
 print(f"--- 접속 정보 확인 ---")
-print(f"HOST: {DB_HOST}")
-print(f"USER: {DB_USER}")
-print(f"DB  : {DB_NAME}")
+print(f"HOST: {settings.DB_HOST}")
+print(f"USER: {settings.DB_USER}")
+print(f"DB  : {settings.DB_NAME}")
 print("--------------------")
 
 

@@ -9,3 +9,7 @@ psycopg2-binary
 black
 ruff
 datasets
+requests
+beautifulsoup4
+pymysql
+pydantic-settings
