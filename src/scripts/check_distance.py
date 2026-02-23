@@ -17,16 +17,16 @@ from src.core.models import Law
 from src.core.config import settings
 
 # ✅ rag_service에서 모델 로드 함수와 설정을 그대로 가져옵니다. (로직 일치 보장)
-from src.services.chat_service import get_models, MAX_DISTANCE_THRESHOLD
+from src.v1_services.chat_service import get_models, MAX_DISTANCE_THRESHOLD
 
 load_dotenv()
 
 # ==========================================
 # 🧪 테스트 설정 (여기를 바꿔가며 실험하세요)
 # ==========================================
-TEST_QUERY = "음주운전 처벌 기준이 뭐야?"
+TEST_QUERY = "What is the punishment for drunk driving?"
 TEST_COUNTRY_ID = 1  # 1: 한국, 2: 영국, 3: 싱가포르
-TEST_LIMIT = 10  # 상위 몇 개까지 볼 것인지 (Top-K보다 넉넉하게 설정)
+TEST_LIMIT = 10000  # 상위 몇 개까지 볼 것인지 (Top-K보다 넉넉하게 설정)
 # ==========================================
 
 
@@ -39,7 +39,7 @@ async def check_distance():
     embedding_model, _ = get_models()
 
     # 2. DB 엔진 생성
-    engine = create_async_engine(settings.DATABASE_URL, echo=False)
+    engine = create_async_engine(settings.ASYNC_DATABASE_URL, echo=False)
 
     # 3. 질문 임베딩 (rag_service와 동일한 방식)
     try:
@@ -54,7 +54,9 @@ async def check_distance():
         # 4. rag_service와 동일한 검색 쿼리 + 동일한 필터링
         stmt = (
             select(
-                Law.law_title,
+                Law.law_id,
+                Law.law_type,
+                Law.section_title,
                 Law.article_no,
                 Law.content,
                 Law.embedding.l2_distance(query_vector).label("distance"),
@@ -74,17 +76,19 @@ async def check_distance():
         print(f"🌍 필터링 국가 ID: {TEST_COUNTRY_ID}")
         print("=" * 100)
         print(
-            f"{'Rank':<5} | {'Distance':<10} | {'Status':<10} | {'Law Info':<25} | {'Content Preview'}"
+            f"{'Rank':<5} | {'ID':<6} | {'Distance':<10} | {'Status':<10} | {'Law Info':<25} | {'Content Preview'}"
         )
         print("-" * 100)
 
         for i, row in enumerate(rows):
-            law_title = row[0]
-            article_no = row[1]
+            law_id = row[0]
+            law_type = row[1]
+            section_title = row[2] or ""
+            article_no = row[3]
             # 보기 좋게 줄바꿈 제거 및 길이 제한
-            raw_content = row[2] or ""
+            raw_content = row[4] or ""
             content = raw_content[:40].replace("\n", " ") + "..."
-            distance = row[3]
+            distance = row[5]
 
             # 시각적 표시 (PASS / FAIL)
             if distance <= MAX_DISTANCE_THRESHOLD:
@@ -97,7 +101,7 @@ async def check_distance():
             color_end = "\033[0m"
 
             print(
-                f"{color_start}{i+1:<5} | {distance:.5f}    | {status:<10} | {law_title} {article_no:<10} | {content}{color_end}"
+                f"{color_start}{i+1:<5} | {law_id:<6} | {distance:.5f}    | {status:<10} | [{law_type}] {article_no:<10} | {content}{color_end}"
             )
 
         print("=" * 100)
