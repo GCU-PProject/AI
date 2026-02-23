@@ -18,7 +18,7 @@ import vertexai
 from dotenv import load_dotenv
 
 from src.core.database import Base
-from src.core.models import Law, Country
+from src.core.models import TestLaw, Country
 
 load_dotenv()
 DATABASE_URL = f"postgresql+asyncpg://{os.getenv('DB_USER')}:{os.getenv('DB_PASSWORD')}@{os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}/{os.getenv('DB_NAME')}"
@@ -102,7 +102,7 @@ async def insert_data():
                 else None
             )
 
-            new_law = Law(
+            new_law = TestLaw(
                 country_id=data[
                     "country_id"
                 ],  # 이제 이 ID는 countries 테이블에 반드시 존재해야 함

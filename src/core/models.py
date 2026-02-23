@@ -32,7 +32,7 @@ class Country(Base):
     laws = relationship("Law", back_populates="country")
 
 
-class Law(Base):
+class TestLaw(Base):
     __tablename__ = "test_laws"
 
     law_id = Column(BigInteger, primary_key=True, autoincrement=True)
@@ -62,7 +62,9 @@ class Law(Base):
     law_id = Column(BigInteger, primary_key=True, autoincrement=True)
 
     # 2. 국가 코드 (미국=1)
-    country_id = Column(BigInteger, nullable=False)
+    country_id = Column(
+        BigInteger, ForeignKey("test_countries.country_id"), nullable=False
+    )
 
     # 3. [변경] 법령 종류 (예: VEH, CIV, PEN)
     # 기존 law_title -> law_type으로 변경하여 코드값 저장
@@ -95,3 +97,5 @@ class Law(Base):
 
     # 10. 임베딩 벡터 (Vertex AI text-embedding-005 기준 768차원)
     embedding = Column(Vector(768))
+
+    country = relationship("Country", back_populates="laws")
