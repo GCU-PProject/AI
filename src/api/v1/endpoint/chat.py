@@ -5,8 +5,8 @@ from src.core.database import get_db
 from src.schemas.common import CommonResponse
 from src.schemas.chat import ChatRequest, ChatResult
 from src.schemas.compare import CompareRequest, CompareResult
-from src.services.chat_service import generate_answer
-from src.services.compare_service import compare_laws
+from src.v1_services.chat_service import generate_answer
+from src.v1_services.compare_service import compare_laws
 
 router = APIRouter()
 logger = logging.getLogger(__name__)

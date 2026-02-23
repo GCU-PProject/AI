@@ -18,3 +18,9 @@ keys/
 
 # Large Data Files
 *.jsonl
+
+# SQLTools
+*.session.sql
+
+# SSH Tunnel Info (보안 정보)
+start_tunnel_info.txt
