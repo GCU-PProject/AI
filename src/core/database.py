@@ -4,7 +4,7 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 from src.core.config import settings
 
 # 엔진 생성
-engine = create_async_engine(settings.DATABASE_URL, echo=False, future=True)
+engine = create_async_engine(settings.ASYNC_DATABASE_URL, echo=False, future=True)
 
 # 세션 생성기
 AsyncSessionLocal = sessionmaker(

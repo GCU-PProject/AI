@@ -24,8 +24,10 @@ MIN_CONTENT_LENGTH = 50
 
 # ================= 로직 =================
 
+
 def clean_text(text):
-    if not text: return ""
+    if not text:
+        return ""
 
     # 1. 시스템 헤더 및 변환기 로그 제거
     text = re.sub(r'.*?Online@[\w\-]+\s+(yes|no)', '', text, flags=re.IGNORECASE)
@@ -71,6 +73,7 @@ def clean_text(text):
 
     return text
 
+
 def get_title(text):
     # 1. "Short title" 패턴: "This Act may be cited as the '...'"
     match_short = re.search(r'(?:Short title|This Act may be cited as|cited as the)\s+["\']([^"\']{5,150})["\']', text, re.IGNORECASE)
@@ -114,11 +117,16 @@ def get_title(text):
     
     return None
 
+
 def is_historical_noise(text):
     preview = text[:500].lower()
     noise_keywords = [
-        "john adams", "abigail adams", "george washington", "letter to", 
-        "diary of", "obidient servant"
+        "john adams",
+        "abigail adams",
+        "george washington",
+        "letter to",
+        "diary of",
+        "obidient servant",
     ]
     return any(k in preview for k in noise_keywords)
 
@@ -274,6 +282,7 @@ def split_into_articles(text):
         
     return chunks
 
+
 def save_data(data):
     rows = []
     text = data['text']
@@ -341,6 +350,7 @@ def save_data(data):
     
     return rows
 
+
 def main():
     global OUTPUT_FILE
     
@@ -363,7 +373,13 @@ def main():
     # 1. 미국 데이터
     print("\n🇺🇸 [US] 수집 중...")
     try:
-        us_ds = load_dataset("pile-of-law/pile-of-law", "uscode", split="train", streaming=True, trust_remote_code=True)
+        us_ds = load_dataset(
+            "pile-of-law/pile-of-law",
+            "uscode",
+            split="train",
+            streaming=True,
+            trust_remote_code=True,
+        )
         count = 0
         for item in us_ds:
             if count >= TARGET_PER_COUNTRY: break
@@ -372,7 +388,7 @@ def main():
             rows = save_data({'text': item['text'], 'country': 'US'})
             final_data.extend(rows)
             count += 1
-            if count % 50 == 0: 
+            if count % 50 == 0:
                 print(f"   Running... {count} (Sample Title: {rows[0]['law_title']})")
                 gc.collect() # 주기적으로 메모리 청소
     except Exception as e: print(f"❌ US Error: {e}")
@@ -412,6 +428,7 @@ def main():
     with open(OUTPUT_FILE, 'w', encoding='utf-8') as f:
         json.dump(final_data, f, ensure_ascii=False, indent=2)
     print("🎉 완료!")
+
 
 if __name__ == "__main__":
     main()
