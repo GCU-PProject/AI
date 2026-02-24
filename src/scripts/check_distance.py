@@ -24,9 +24,9 @@ load_dotenv()
 # ==========================================
 # 🧪 테스트 설정 (여기를 바꿔가며 실험하세요)
 # ==========================================
-TEST_QUERY = "What is the punishment for drunk driving?"
+TEST_QUERY = "Is it okay to drink alcohol in California?"
 TEST_COUNTRY_ID = 1  # 1: 한국, 2: 영국, 3: 싱가포르
-TEST_LIMIT = 10000  # 상위 몇 개까지 볼 것인지 (Top-K보다 넉넉하게 설정)
+TEST_LIMIT = 100  # 상위 몇 개까지 볼 것인지 (Top-K보다 넉넉하게 설정)
 # ==========================================
 
 

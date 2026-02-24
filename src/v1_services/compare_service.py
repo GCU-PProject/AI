@@ -1,3 +1,36 @@
+# src/v1_services/compare_service.py
+"""
+[v1] Vertex AI SDK 직접 호출 방식의 법률 비교 서비스
+
+이 파일은 두 국가의 법률을 비교 분석하는 서비스를 구현합니다.
+LangChain 없이 Google Vertex AI SDK를 직접 호출하며,
+검색 결과를 f-string으로 프롬프트에 조립하고 JSON 응답을 수동으로 파싱합니다.
+
+[chat_service.py와의 관계]
+chat_service와 동일한 임베딩/검색 로직을 사용하지만,
+v1에서는 공통 함수를 분리하지 않아 코드가 중복됩니다.
+v2에서는 chat_service의 retrieve_laws(), format_docs()를 재사용하여 중복을 제거했습니다.
+
+[v2와의 차이점]
+| 구분       | v1 (이 파일)                           | v2 (LangChain)                      |
+|------------|----------------------------------------|--------------------------------------|
+| 프롬프트   | f-string ({{ }} 이중 이스케이프 필요)  | ChatPromptTemplate (이스케이프 불필요)|
+| JSON 파싱  | json.loads() 수동 파싱                 | JsonOutputParser (자동 파싱)          |
+| JSON 강제  | response_mime_type="application/json"  | JsonOutputParser가 자동 처리          |
+| 검색       | 자체 _search_laws() 구현               | chat_service의 retrieve_laws() 재사용 |
+| 모델 초기화| 매 요청마다 get_models() 호출          | 모듈 로드 시 1회 초기화               |
+
+[전체 처리 흐름]
+사용자 질문
+    → 1단계: 국가 정보 조회 (country_id → country_name)
+    → 2단계: 질문을 벡터로 변환 (임베딩, 1회만 수행)
+    → 3단계: 두 국가 각각 벡터 검색 (Double Retrieval)
+    → 4단계: 검색 결과가 없는 국가가 있으면 에러 반환
+    → 5단계: 검색 결과를 f-string으로 프롬프트에 조립
+    → 6단계: Gemini에 JSON 형식 응답 요청
+    → 7단계: JSON 파싱 후 API 응답 형식으로 반환
+"""
+
 import json
 import vertexai
 from typing import Dict, Any, List
@@ -8,21 +41,30 @@ from sqlalchemy import select
 from src.core.models import Law, Country
 from src.core.config import settings
 
-# ---------------------------------------------------------
-# 1. 설정값 정의 (chat_service와 동일한 스타일)
-# ---------------------------------------------------------
+# =========================================================
+# 1. 설정값 (하이퍼파라미터)
+# =========================================================
+# chat_service.py와 동일한 설정값입니다.
+# ※ v2에서는 chat_service에서 import하여 한곳에서 관리합니다.
+
+# TOP_K: 벡터 검색에서 가져올 최대 문서 수
 TOP_K = 3
-MAX_DISTANCE_THRESHOLD = 1.5
+
+# MAX_DISTANCE_THRESHOLD: L2 거리 기반 유사도 임계값
+MAX_DISTANCE_THRESHOLD = 0.85
 
 
-# ---------------------------------------------------------
-# 2. 모델 로드 헬퍼 (동일한 스타일)
-# ---------------------------------------------------------
+# =========================================================
+# 2. 모델 로드 함수
+# =========================================================
+# chat_service.py의 get_models()와 동일한 함수입니다.
+# v1에서는 코드가 중복되지만, v2에서는 chat_service에서 공통 객체를 재사용합니다.
+
+
 def get_models():
-    # GCP 프로젝트 설정
+    """GCP 프로젝트 초기화 및 임베딩/생성 모델 로드"""
     vertexai.init(project=settings.GCP_PROJECT_ID, location=settings.GCP_LOCATION)
 
-    # 모델 로드
     embedding_model = TextEmbeddingModel.from_pretrained("text-embedding-005")
     model_name = settings.GCP_MODEL_NAME
     generative_model = GenerativeModel(model_name)
@@ -30,13 +72,31 @@ def get_models():
     return embedding_model, generative_model
 
 
-# ---------------------------------------------------------
-# 3. [내부 함수] 국가별 검색 로직 (중복 제거용)
-# ---------------------------------------------------------
-async def _search_laws(query_vector, country_id: int, db: AsyncSession) -> List[Law]:
-    """특정 국가 ID로 벡터 검색을 수행하고 유효한 문서만 반환"""
+# =========================================================
+# 3. 벡터 검색 함수 (국가별)
+# =========================================================
+# 한 국가에 대한 벡터 검색을 수행하는 내부 함수입니다.
+# compare_laws()에서 두 국가를 각각 검색할 때 코드 중복을 줄이기 위해 분리했습니다.
+#
+# [v2와의 차이]
+# v2에서는 chat_service의 retrieve_laws()를 재사용하므로 이 함수가 필요 없습니다.
+# 또한 v2의 retrieve_laws()는 결과를 LangChain Document로 변환하지만,
+# v1의 이 함수는 Law 객체를 그대로 반환합니다.
 
-    # DB 쿼리 (chat_service와 구조 동일)
+
+async def _search_laws(query_vector, country_id: int, db: AsyncSession) -> List[Law]:
+    """
+    특정 국가의 법률에서 벡터 유사도 검색을 수행합니다.
+
+    Args:
+        query_vector: 질문의 임베딩 벡터 (768차원 숫자 배열)
+        country_id: 검색 대상 국가 ID
+        db: 비동기 DB 세션
+
+    Returns:
+        임계값을 통과한 Law 객체 리스트
+    """
+    # pgvector의 l2_distance()로 질문 벡터와 법률 벡터 간의 거리 계산
     stmt = (
         select(Law, Law.embedding.l2_distance(query_vector).label("distance"))
         .where(Law.country_id == country_id)
@@ -47,40 +107,60 @@ async def _search_laws(query_vector, country_id: int, db: AsyncSession) -> List[
     result = await db.execute(stmt)
     rows = result.all()
 
+    # 임계값(0.85) 이하인 문서만 유효한 결과로 반환
     valid_docs = []
     for row in rows:
-        law = row[0]
-        distance = row[1]
-        # 임계값 체크
+        law = row[0]  # Law 객체
+        distance = row[1]  # L2 거리 값
         if distance <= MAX_DISTANCE_THRESHOLD:
             valid_docs.append(law)
 
     return valid_docs
 
 
-# ---------------------------------------------------------
-# 4. [메인] 법률 비교 서비스 로직
-# ---------------------------------------------------------
+# =========================================================
+# 4. [메인] 법률 비교 서비스
+# =========================================================
+# 이 함수가 API 엔드포인트(/api/v1/compare)에서 호출되는 최종 진입점입니다.
+
+
 async def compare_laws(
     query: str, db: AsyncSession, country_id_1: int, country_id_2: int
 ) -> Dict[str, Any]:
+    """
+    두 국가의 법률을 비교 분석합니다.
 
+    [전체 흐름]
+    모델 로드 → 국가 조회 → 임베딩 → 검색(×2) → 검증 → 프롬프트 조립 → LLM(JSON) → 파싱 → 응답
+
+    Args:
+        query: 사용자의 원본 질문
+        db: 비동기 DB 세션
+        country_id_1: 기준 국가 ID
+        country_id_2: 비교 국가 ID
+
+    Returns:
+        비교 분석 결과 (각 국가 요약 + 공통점/차이점)
+    """
+    # 모델 로드 (매 요청마다 호출 - v1의 한계점)
     embedding_model, generative_model = get_models()
 
-    # 국가 정보 조회 (ID -> Name 변환용)
-    # ---------------------------------------------------------
-    # 두 국가의 ID로 DB를 한 번만 조회하여 {id: name} 맵을 만듭니다.
+    # ----- Step 1: 국가 정보 조회 (ID → 이름 변환) -----
+    # 에러 메시지에서 국가 이름을 표시하기 위해
+    # DB에서 {country_id: country_name} 매핑을 미리 조회합니다.
+    # .in_() 연산자로 두 국가를 한 번의 쿼리로 동시에 조회합니다.
     country_stmt = select(Country).where(
         Country.country_id.in_([country_id_1, country_id_2])
     )
     country_result = await db.execute(country_stmt)
     countries = country_result.scalars().all()
 
-    # 맵 생성 (예: {1: "KR", 2: "US"})
+    # 예: {1: "United States (California)", 2: "United States (New York)"}
     country_map = {c.country_id: c.country_name for c in countries}
-    # ---------------------------------------------------------
 
-    # 1. [임베딩] 질문을 벡터로 변환 (1회만 수행)
+    # ----- Step 2: 질문을 벡터로 변환 (임베딩) -----
+    # 질문 임베딩은 1회만 수행하고, 두 국가 검색에 모두 같은 벡터를 사용합니다.
+    # ※ v1에서는 한국어 질문을 그대로 임베딩 (v2에서는 영어 번역 후 임베딩)
     try:
         text_input = TextEmbeddingInput(text=query, task_type="RETRIEVAL_QUERY")
         embeddings = embedding_model.get_embeddings([text_input])
@@ -89,24 +169,23 @@ async def compare_laws(
         print(f"❌ 임베딩 실패: {e}")
         raise e
 
-    # 2. [검색] 두 국가 각각 검색 (Double Retrieval)
-    # _search_laws 내부 로직은 chat_service의 검색 부분과 동일합니다.
+    # ----- Step 3: 두 국가 각각 벡터 검색 (Double Retrieval) -----
+    # 같은 질문 벡터로 두 국가의 법률을 각각 검색합니다.
     docs_1 = await _search_laws(query_vector, country_id_1, db)
     docs_2 = await _search_laws(query_vector, country_id_2, db)
 
-    # 3. [검증] 데이터 존재 여부 확인
+    # ----- Step 4: 검색 결과 검증 -----
+    # 한쪽이라도 유효한 검색 결과가 없으면 비교가 불가능합니다.
+    # LLM을 호출하지 않고 바로 에러 응답을 반환합니다.
     if not docs_1 or not docs_2:
         missing_country = []
 
-        # 데이터가 없는 경우, 위에서 만든 map을 이용해 국가 코드를 가져옴
         if not docs_1:
-            # get(id, "Unknown")은 혹시 모를 ID 오류 방지용
+            # get(id, str(id)): 매핑에 없을 경우 ID 숫자를 대신 표시 (안전장치)
             missing_country.append(country_map.get(country_id_1, str(country_id_1)))
-
         if not docs_2:
             missing_country.append(country_map.get(country_id_2, str(country_id_2)))
 
-        # 메시지 생성 (예: "KR, US의 관련 법률 데이터를...")
         error_msg = (
             f"{', '.join(missing_country)}의 관련 법률 데이터를 찾을 수 없습니다."
         )
@@ -115,12 +194,14 @@ async def compare_laws(
             "search_success": False,
             "country_1_result": {"related_law_ids": [], "summary": "자료 없음"},
             "country_2_result": {"related_law_ids": [], "summary": "자료 없음"},
-            # 프론트엔드에 보여줄 에러 메시지
             "compare_summary": {"common": error_msg, "diff": ""},
         }
 
-    # 4. [프롬프트] 컨텍스트 구성
+    # ----- Step 5: 프롬프트 조립 (f-string 방식) -----
+
+    # (5-1) 검색 결과를 텍스트로 변환하는 내부 함수
     def format_context(docs):
+        """Law 객체 리스트를 프롬프트에 삽입할 텍스트로 변환"""
         if not docs:
             return "(관련 법률 정보 없음)"
 
@@ -128,7 +209,8 @@ async def compare_laws(
         for law in docs:
             context_text += f"""
             [문서 ID: {law.law_id}]
-            - 법률명: {law.law_title}
+            - 법률 종류: {law.law_type}
+            - 목차: {law.section_title}
             - 조항: {law.article_no}
             - 내용: {law.content}
             --------------------------------------------------
@@ -138,8 +220,22 @@ async def compare_laws(
     context_1 = format_context(docs_1)
     context_2 = format_context(docs_2)
 
+    # (5-2) 답변 불가 메시지 (상수로 분리하여 프롬프트에서 일관되게 사용)
     NO_DATA_MSG = "죄송합니다. 제공된 정보만으로는 답변하기 어렵습니다."
 
+    # (5-3) 비교 분석 프롬프트
+    #
+    # [f-string에서 {{ }} 이중 이스케이프가 필요한 이유]
+    # f-string은 {변수}를 Python 변수로 치환합니다.
+    # 그런데 JSON 형식에도 중괄호 { }가 사용됩니다.
+    # f-string이 JSON의 { }를 변수로 인식하지 않도록,
+    # {{ }}로 이스케이프하면 출력 시 { }로 변환됩니다.
+    #
+    # 예: f"{{\"key\": \"value\"}}" → 출력: {"key": "value"}
+    #
+    # [v2에서의 개선]
+    # v2의 ChatPromptTemplate은 {변수명}만 치환하므로
+    # 일반 { }를 이스케이프할 필요가 없어 프롬프트가 훨씬 읽기 쉽습니다.
     prompt = f"""
     당신은 'Global Legal Assistant'입니다.
     전 세계 법률 정보를 바탕으로 두 국가의 법률을 객관적으로 비교 분석하는 법률 AI 전문가입니다.
@@ -183,21 +279,29 @@ async def compare_laws(
     }}
     """
 
-    # 5. [생성] Gemini에게 답변 요청
+    # ----- Step 6: Gemini에게 JSON 형식 답변 요청 -----
+    # [response_mime_type 설명]
+    # "application/json"을 지정하면 Gemini가 반드시 JSON 형식으로 응답합니다.
+    # 이렇게 하면 마크다운 코드 블록(```json ... ```) 없이 순수 JSON만 출력되어
+    # json.loads()로 바로 파싱할 수 있습니다.
+    #
+    # [v2와의 차이]
+    # v2에서는 JsonOutputParser가 자동으로 JSON을 추출하므로
+    # response_mime_type을 설정할 필요가 없습니다.
     try:
         config = GenerationConfig(
             temperature=0.0,
             max_output_tokens=2048,
-            response_mime_type="application/json",  # JSON 응답 강제
+            response_mime_type="application/json",
         )
         response = generative_model.generate_content(prompt, generation_config=config)
 
-        # JSON 파싱
+        # LLM 응답 텍스트를 Python dict로 변환 (수동 파싱)
         analysis = json.loads(response.text)
 
     except Exception as e:
         print(f"❌ Gemini 호출/파싱 실패: {e}")
-        # 에러 발생 시 기본값 채움
+        # JSON 파싱 실패 또는 API 호출 실패 시 기본값으로 대체
         analysis = {
             "summary_1": "분석 실패",
             "summary_2": "분석 실패",
@@ -205,7 +309,9 @@ async def compare_laws(
             "diff": "오류 발생",
         }
 
-    # 6. [반환] 결과 구조 조립
+    # ----- Step 7: 결과 반환 -----
+    # LLM의 JSON 응답에서 각 필드를 추출하여 API 응답 형식에 맞게 재조립합니다.
+    # analysis.get("key", ""): 키가 없을 경우 빈 문자열을 기본값으로 사용 (안전장치)
     return {
         "search_success": True,
         "country_1_result": {
