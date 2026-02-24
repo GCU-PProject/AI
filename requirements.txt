@@ -13,3 +13,9 @@ requests
 beautifulsoup4
 pymysql
 pydantic-settings
+
+# LangChain (v2)
+langchain
+langchain-google-vertexai
+langchain-community
+langchain-postgres
