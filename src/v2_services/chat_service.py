@@ -29,7 +29,7 @@ v1에서는 Google Vertex AI SDK를 직접 호출하여 임베딩, 검색, 프�
     → 6단계: API 응답 반환
 """
 
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from langchain_google_vertexai import VertexAIEmbeddings, ChatVertexAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
@@ -38,6 +38,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from src.core.models import Law
 from src.core.config import settings
+from src.v2_services.memory import contextualize_question, save_to_history
 
 # =========================================================
 # 1. 설정값 (하이퍼파라미터)
@@ -181,26 +182,33 @@ async def translate_query(query: str) -> str:
 SYSTEM_PROMPT = """당신은 'Global Legal Assistant'입니다.
 전 세계 법률 정보를 바탕으로 사용자에게 정확하고 신뢰할 수 있는 정보를 제공하는 법률 AI 전문가입니다.
 
-반드시 아래 제공된 [근거 자료]만을 바탕으로 답변을 작성하십시오. 외부 지식은 절대 사용하지 마십시오.
+반드시 아래 제공된 법률 조항만을 바탕으로 답변을 작성하십시오. 외부 지식은 절대 사용하지 마십시오.
 
-[근거 자료]
+--- 관련 법률 조항 ---
 {context}
 
 [답변 작성 가이드라인]
-1. 가장 먼저 [근거 자료]가 질문의 주제와 일치하는지 판단하십시오.
-2. 만약 [근거 자료]가 질문과 관련이 없다면, "죄송합니다. 제공된 정보만으로는 답변하기 어렵습니다."라고만 답변하십시오.
+1. 가장 먼저 제공된 법률 조항이 질문의 주제와 일치하는지 판단하십시오.
+2. 만약 제공된 법률 조항이 질문과 관련이 없다면, "죄송합니다. 제공된 정보만으로는 답변하기 어렵습니다."라고만 답변하십시오.
 3. 답변이 가능한 경우, 핵심 내용만 간결하게 3~5문장 내외로 요약하십시오.
-4. 답변의 모든 내용은 [근거 자료]에 있는 내용이어야 합니다. 없는 내용은 절대 지어내지 마십시오.
+4. 답변의 모든 내용은 제공된 법률 조항에 있는 내용이어야 합니다. 없는 내용은 절대 지어내지 마십시오.
 5. 답변 본문에는 법률 코드를 넣지 마십시오. 대신 답변 마지막에 [참고 법령] 섹션을 만들어 인용한 법률 코드를 나열하십시오.
 6. 사용자의 질문이 한국어라면, 근거 자료가 영어일지라도 반드시 자연스러운 한국어로 번역하여 답변하십시오.
 7. 답변을 제공한 경우에만 마지막에 "※ 본 답변은 법률적 조언이 아니며 정보 제공을 목적으로 합니다."를 포함하십시오.
 
 [답변 형식]
+반드시 아래 형식을 따르십시오:
+
 - 질문에 답할 수 있는 경우:
-    - 결론: (1문장으로 명확하게 제시)
-    - 상세 내용: (법률 조항을 근거로 2~4문장 요약, 본문에 법률 코드 넣지 않기)
-    - [참고 법령]: VEH 23123, CIV 1950.7(c) 등
-    - ※ 본 답변은 법률적 조언이 아니며 정보 제공을 목적으로 합니다.
+
+**결론:** (핵심을 1문장으로 명확하게 제시)
+
+**상세 내용:** (법률 조항을 근거로 2~4문장 요약, 본문에 법률 코드 넣지 않기)
+
+**[참고 법령]:** VEH 23123, CIV 1950.7(c) 등
+
+※ 본 답변은 법률적 조언이 아니며 정보 제공을 목적으로 합니다.
+
 - 질문에 답할 수 없는 경우:
     "죄송합니다. 제공된 정보만으로는 답변하기 어렵습니다."
 """
@@ -353,7 +361,7 @@ def format_docs(docs: List[Document]) -> str:
 
 
 async def generate_answer(
-    query: str, db: AsyncSession, country_id: int
+    query: str, db: AsyncSession, country_id: int, session_id: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     사용자의 법률 질문에 대해 RAG 기반 답변을 생성합니다.
@@ -375,10 +383,19 @@ async def generate_answer(
     """
     print(f"🌍 [v2/LangChain] 국가 필터링 적용: ID {country_id}")
 
+    # ----- Step 0: 질문 재구성 (대화 맥락 반영) -----
+    # session_id가 있으면 이전 대화 기록을 참고하여 후속 질문을 독립적 질문으로 재구성
+    # 예: "그러면 벌금은?" → "캘리포니아 음주운전 DUI 벌금은?"
+    # session_id가 없으면 (None) 원본 질문을 그대로 사용
+    search_query = query
+    if session_id:
+        search_query = await contextualize_question(query, session_id, llm)
+
     # ----- Step 1: 질문 번역 (한국어 → 영어) -----
     # 검색 정확도를 위해 질문을 영어로 번역합니다.
-    # 원본 질문(query)은 보존하고, 번역본(translated_query)은 검색에만 사용합니다.
-    translated_query = await translate_query(query)
+    # 재구성된 질문(search_query)을 번역합니다.
+    # 원본 질문(query)은 보존하고, 최종 답변 생성에서 사용합니다.
+    translated_query = await translate_query(search_query)
 
     # ----- Step 2: 벡터 검색 (번역된 질문으로) -----
     # 영어로 번역된 질문을 임베딩하여 DB에서 유사한 법률 조항을 검색합니다.
@@ -411,7 +428,13 @@ async def generate_answer(
 
     final_answer = await chain.ainvoke({"context": context, "question": query})
 
-    # ----- Step 6: 결과 반환 -----
+    # ----- Step 6: 대화 기록 저장 -----
+    # session_id가 있으면 이번 질문/답변을 대화 기록에 추가
+    # 다음 요청에서 contextualize_question()이 이 기록을 참고합니다.
+    if session_id:
+        save_to_history(session_id, query, final_answer)
+
+    # ----- Step 7: 결과 반환 -----
     return {
         "answer": final_answer,
         "related_law_id_list": law_ids,
