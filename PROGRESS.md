@@ -1,7 +1,7 @@
 # 🌍 GLAW AI - 프로젝트 개발 진행 보고서
 
 > 글로벌 법률 비교 AI 서비스 (RAG 기반)  
-> 최종 수정일: 2026-02-23
+> 최종 수정일: 2026-03-05
 
 ---
 
@@ -366,7 +366,7 @@ src/
 
 ---
 
-## 6. Phase 5 - 대화 기록(Memory) 구현
+## 6. Phase 5 - 대화 기록(Memory) 구현 및 RAG 최적화
 
 ### 6.1 목표
 
@@ -413,14 +413,288 @@ v2 서비스에 대화 맥락 기억 기능을 추가하여, 사용자가 후속
 #### ❌ session_id 없음 → 맥락 없어 답변 불가 (정상 동작)
 ![session_id 없음 - 맥락 없음](docs/images/memory_test_without_session.png)
 
+### 6.5 RAG 통합 테스트 및 최적화 (2026-03-03)
+
+데이터 적재 완료 후 RAG 전체 파이프라인을 테스트하면서 발견된 문제점들을 수정하였다.
+
+#### 6.5.1 질문 재구성 프롬프트 개선
+
+**문제**: LLM이 질문을 재구성하지 않고, 대신 전체 답변을 생성하는 현상이 발생하였다.
+
+```
+# 비정상 동작 예시
+질문 재구성: '과속 벌금은 얼마인가요?'
+→ '과속 벌금은 제한 속도 위반 정도에 따라 다릅니다...' (답변을 생성해버림)
+```
+
+**해결**: 프롬프트에 few-shot 예시를 추가하여 원하는 출력 형식을 명확히 보여주었다.
+
+```python
+# 변경 후 프롬프트 (few-shot 예시 포함)
+"Your ONLY job is to rewrite the user's latest message as a standalone question."
+"Output ONLY the rewritten question. No answers, no explanations, no extra text."
+"Examples:"
+"- Chat history about DUI, user says '그러면 벌금은?' → '음주운전 벌금은 얼마인가요?'"
+"- User says '교통사고 처벌이 뭐야?' (no relevant history) → '교통사고 처벌이 뭐야?'"
+```
+
+#### 6.5.2 슬라이딩 윈도우 메모리 적용
+
+**문제**: 같은 세션에서 대화가 길어질수록 오래된 주제가 질문 재구성을 오염시켜, 재구성 품질이 저하되는 현상이 발생하였다.
+
+**해결**: 대화 기록 전체 대신 최근 3쌍(6개 메시지)만 참고하는 슬라이딩 윈도우 방식을 적용하였다.
+
+```python
+MEMORY_WINDOW_SIZE = 3  # 최근 3쌍만 참고
+recent_messages = history.messages[-(MEMORY_WINDOW_SIZE * 2):]
+```
+
+| 윈도우 크기 | 선정 근거 |
+|-------------|-----------|
+| 3쌍 (6메시지) | LangChain 기본값(5쌍)보다 작지만, 법률 Q&A의 후속 질문은 직전 1~2턴만 참고하면 충분하므로 3쌍으로 설정 |
+
+#### 6.5.3 빈 문자열 안전장치 추가
+
+**문제**: 질문 재구성 결과가 빈 문자열(`''`)로 반환되는 경우, 이후 번역 함수에 빈 입력이 전달되어 `400 Model input cannot be empty` 에러가 발생하였다.
+
+**해결**: 재구성 결과가 비어있거나 공백만 있으면 원본 질문으로 폴백하는 안전장치를 추가하였다.
+
+```python
+if not contextualized or not contextualized.strip():
+    print(f"⚠️ 질문 재구성 결과가 비어있어 원본 질문을 사용합니다: '{query}'")
+    return query
+```
+
+#### 6.5.4 검색 임계값 조정 (0.85 → 0.90)
+
+**문제**: 한국어 질문을 영어로 번역할 때, 미묘한 뉘앙스 차이로 인해 관련 법률이 임계값을 아슬아슬하게 넘겨 누락되는 현상이 발생하였다.
+
+```
+# 한국어 번역: "What should I do if..." → 검색 결과 3개 (행동 중심 뉘앙스)
+# 영어 직접:  "What happens if..."     → 검색 결과 5개 (결과 중심 뉘앙스)
+```
+
+**해결**: `MAX_DISTANCE_THRESHOLD`를 0.85에서 0.90으로 완화하였다. TOP_K=5로 최대 문서 수가 제한되어 있으므로, 임계값을 올려도 관련 없는 문서가 대량 유입될 위험이 없다.
+
+#### 6.5.5 최대 출력 토큰 증가 (1024 → 2048)
+
+한국어는 영어보다 토큰을 더 많이 소모하므로, 답변이 중간에 잘리는 현상을 방지하기 위해 최대 출력 토큰을 1024에서 2048로 올렸다.
+
+#### 6.5.6 수정 파일 요약
+
+| 파일 | 변경 내용 |
+|------|-----------|
+| `v2_services/memory.py` | 질문 재구성 프롬프트 few-shot 예시 추가 |
+| `v2_services/memory.py` | 슬라이딩 윈도우 3쌍(6메시지) 적용 |
+| `v2_services/memory.py` | 빈 문자열 안전장치 추가 |
+| `v2_services/chat_service.py` | `MAX_DISTANCE_THRESHOLD` 0.85 → 0.90 |
+| `v2_services/chat_service.py` | `max_output_tokens` 1024 → 2048 |
+
+### 6.6 입력 검증 강화 (2026-03-05)
+
+사용자의 잘못된 입력이 서비스 내부까지 전달되어 예상치 못한 에러를 발생시키는 것을 방지하기 위해, Pydantic의 검증 기능을 활용하여 스키마 단에서 입력을 검증하도록 구현하였다.
+
+#### 6.6.1 Pydantic Validator란?
+
+Pydantic은 FastAPI에서 요청 데이터를 검증하는 라이브러리이다. `@field_validator`와 `@model_validator` 데코레이터를 사용하면 요청이 들어올 때 자동으로 검증 함수가 실행된다.
+
+```python
+# field_validator: 필드 하나를 검증 (예: query가 비어있는지)
+@field_validator("query")
+def check_query(cls, v):    # cls = 클래스 자체, v = 해당 필드의 값
+    if not v or not v.strip():
+        raise ValueError("질문을 입력해주세요.")
+    return v                 # 통과 시 값을 그대로 반환
+
+# model_validator: 여러 필드를 동시에 검증 (예: 두 국가 ID가 같은지)
+@model_validator(mode="after")
+def check_country_ids(self):  # self = 모든 필드가 들어있는 객체
+    if self.country_id_1 == self.country_id_2:
+        raise ValueError("두 국가 ID가 같습니다.")
+    return self
+```
+
+- `raise ValueError`가 실행되면 서비스 코드까지 도달하지 않고, FastAPI가 자동으로 **422 Validation Error** 응답을 반환한다.
+- 스키마에서 검증하면 v1, v2 어떤 엔드포인트를 사용하든 동일한 규칙이 적용된다.
+
+#### 6.6.2 검증 규칙
+
+| 스키마 | 검증 항목 | 방식 | 실패 시 |
+|--------|-----------|------|---------|
+| `ChatRequest` | 빈 질문 차단 | `@field_validator` | 422 에러 |
+| `CompareRequest` | 빈 질문 차단 | `@field_validator` | 422 에러 |
+| `CompareRequest` | 같은 국가 비교 방지 | `@model_validator` | 422 에러 |
+
+#### 6.6.3 `field_validator` vs `model_validator` 사용 기준
+
+| 구분 | `field_validator` | `model_validator` |
+|------|-------------------|-------------------|
+| 검사 대상 | 필드 하나 | 모델 전체 (여러 필드) |
+| 인자 | `cls, v` (값 하나) | `self` (객체 전체) |
+| return | `return v` (값 하나) | `return self` (객체 전체) |
+| 사용 예 | 빈 값 체크, 범위 체크 | 필드 간 비교, 조합 검증 |
+
+#### 6.6.4 country_id 존재 여부 검증
+
+`country_id`가 DB에 존재하는지 확인하는 검증은 **스키마가 아닌 엔드포인트**에서 처리한다. 그 이유는 스키마에서는 DB에 접근할 수 없기 때문이다.
+
+```python
+# api/v2/endpoint/chat.py - chat 엔드포인트
+country = await db.execute(
+    select(Country).where(Country.country_id == request.country_id)
+)
+if not country.scalar():
+    return CommonResponse(code="AI404", message="존재하지 않는 국가 ID입니다")
+
+# api/v2/endpoint/chat.py - compare 엔드포인트
+# .in_()을 사용하여 두 국가를 한 번의 쿼리로 동시에 조회
+country_results = await db.execute(
+    select(Country).where(
+        Country.country_id.in_([request.country_id_1, request.country_id_2])
+    )
+)
+countries = country_results.scalars().all()
+if len(countries) != 2:  # 2개가 아니면 하나 이상이 존재하지 않는 것
+    # 어떤 ID가 없는지 특정하여 에러 메시지에 포함
+```
+
+#### 6.6.5 검증 위치별 역할 정리
+
+```
+요청 들어옴
+    ↓
+① 스키마 (schemas/)            → 빈 질문 차단, 같은 국가 비교 차단
+    ↓
+② 엔드포인트 (api/v2/endpoint/) → country_id DB 존재 여부 체크
+    ↓
+③ 서비스 (v2_services/)         → 법률 데이터 유무 체크
+    ↓
+LLM 호출
+```
+
+---
+
+### 6.7 비교 서비스 부분 검색 개선 (2026-03-05)
+
+**문제**: 두 국가를 비교할 때, 한쪽에만 데이터가 없으면 양쪽 모두 "자료 없음"으로 반환되는 문제가 있었다.
+
+```python
+# 기존 코드: 한쪽이라도 없으면 둘 다 "자료 없음" 반환
+if not docs_1 or not docs_2:
+    return { 둘 다 "자료 없음" }
+```
+
+**해결**: `or`를 `and`로 변경하여, 둘 다 없을 때만 즉시 반환하고, 한쪽만 없을 때는 있는 쪽의 데이터를 보여주도록 개선하였다.
+
+```python
+# 변경 후: 둘 다 없을 때만 즉시 반환
+if not docs_1 and not docs_2:
+    return { 둘 다 "자료 없음" }
+
+# 한쪽만 없을 때: 없는 쪽은 국가명과 함께 안내 메시지 표시
+if not docs_1:
+    context_1_text = f"{country_name}의 법률 데이터가 없습니다."
+else:
+    context_1_text = format_docs(docs_1)
+```
+
+이 방식으로 사용자가 한 번의 요청으로 최대한 많은 정보를 얻을 수 있게 되었다.
+
+---
+
+### 6.8 에러 핸들링 세분화 (2026-03-05)
+
+#### 6.8.1 번역 함수 에러 처리
+
+`translate_query()` 함수에 try-except를 추가하여, 번역 실패 시 에러를 상위로 전파하도록 구현하였다. 번역이 실패하면 부정확한 한국어 질문으로 검색하는 것보다, 에러를 반환하여 사용자에게 명확히 알리는 것이 법률 서비스에 더 적합하다고 판단하였다.
+
+```python
+async def translate_query(query: str) -> str:
+    try:
+        translated = await chain.ainvoke({"query": query})
+        if not translated or not translated.strip():
+            raise ValueError("번역 결과가 없습니다.")
+        return translated
+    except Exception as e:
+        print(f"번역 실패: {str(e)}")
+        raise  # 에러를 엔드포인트의 except까지 전파
+```
+
+#### 6.8.2 엔드포인트 에러 세분화
+
+기존에는 모든 에러를 `except Exception`으로 한 번에 처리하여 "서버 내부 오류"로만 반환하였다. 이를 에러 종류별로 세분화하여 사용자에게 더 명확한 에러 메시지를 제공하도록 개선하였다.
+
+```python
+try:
+    result_data = await generate_answer(...)
+
+except ConnectionError:         # DB 연결 실패 (SSH 터널 끊김 등)
+    return CommonResponse(code="AI503", message="DB 연결 실패")
+
+except ValueError as e:         # 번역 실패, 빈 결과 등
+    return CommonResponse(code="AI400", message=f"요청 처리 중 오류: {str(e)}")
+
+except Exception as e:          # 예상 못 한 기타 에러 (최후의 안전망)
+    return CommonResponse(code="AI500", message="서버 내부 오류")
+```
+
+**except 순서가 중요**: 위에서부터 순서대로 체크하며, `Exception`은 모든 에러의 부모이므로 반드시 마지막에 위치해야 한다. 만약 `except Exception`을 첫 번째로 놓으면 `ConnectionError`와 `ValueError`가 절대 잡히지 않는다.
+
+#### 6.8.3 에러 코드 체계
+
+| 코드 | 의미 | 발생 상황 |
+|------|------|-----------|
+| AI200 | 성공 | 정상 응답 |
+| AI400 | 요청 오류 | 번역 실패, 값 오류 |
+| AI404 | 찾을 수 없음 | 존재하지 않는 country_id |
+| AI500 | 서버 내부 오류 | 예상 못 한 에러 |
+| AI503 | 서비스 불가 | DB 연결 실패 |
+
+---
+
+### 6.9 대화 기록 저장 방식 변경 (2026-03-05)
+
+**문제**: 원본 질문("벌금은?")을 저장하면, 슬라이딩 윈도우(3쌍)에서 핵심 키워드("교통사고")가 사라질 수 있다.
+
+```
+# 원본 저장 시 문제점
+메시지 기록: ["교통사고 어떻게 해?", "벌금은?", "면허 정지 기간은?"]
+→ 다음 질문 시 "교통사고" 키워드가 윈도우에서 사라짐!
+```
+
+**해결**: `save_to_history`에서 원본 질문 대신 재구성된 질문을 저장하도록 변경하였다.
+
+```python
+# 변경 전
+save_to_history(session_id, query, final_answer)           # 원본: "벌금은?"
+
+# 변경 후
+save_to_history(session_id, search_query, final_answer)    # 재구성: "교통사고 벌금은 얼마인가?"
+```
+
+이렇게 하면 슬라이딩 윈도우에서 핵심 키워드가 계속 유지되어, 대화가 길어져도 맥락 추적이 안정적으로 이루어진다.
+
+---
+
+### 6.10 수정 파일 요약 (2026-03-05)
+
+| 파일 | 변경 내용 |
+|------|-----------|
+| `schemas/chat.py` | `@field_validator("query")` 추가 - 빈 질문 차단 |
+| `schemas/compare.py` | `@field_validator("query")` 추가 - 빈 질문 차단 |
+| `schemas/compare.py` | `@model_validator` 추가 - 같은 국가 비교 방지 |
+| `api/v2/endpoint/chat.py` | country_id DB 존재 여부 검증 추가 |
+| `api/v2/endpoint/chat.py` | 에러 핸들링 세분화 (ConnectionError, ValueError, Exception) |
+| `v2_services/chat_service.py` | `translate_query()` 에러 처리 추가 |
+| `v2_services/chat_service.py` | `save_to_history` 재구성 질문 저장으로 변경 |
+| `v2_services/compare_service.py` | 한쪽만 데이터 없을 때도 비교 결과 반환 |
+
 ---
 
 ## 7. Phase 6 - 추가 고도화 (예정)
 
 | 우선순위 | 항목 | 설명 |
 |----------|------|------|
-| 높음 | 입력 검증 강화 | 같은 국가 비교 방지, 존재하지 않는 country_id 처리, 빈 질문 차단 |
-| 높음 | 에러 핸들링 강화 | 번역 실패 시 원본 질문으로 fallback, DB 연결 끊김 대응 |
 | 중간 | Reranker 도입 | 벡터 검색 후 LLM 기반 관련성 재평가로 검색 품질 향상 |
 | 중간 | Hybrid Search | 벡터 검색 + 키워드 검색(BM25) 결합 |
 | 중간 | Streaming 응답 | LLM 응답을 실시간으로 전달하여 UX 개선 |
