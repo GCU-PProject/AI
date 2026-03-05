@@ -44,7 +44,7 @@ async def step2_load_to_db():
     )
 
     # 루트 디렉토리에서 '_embedded.jsonl'로 끝나는 모든 파일 찾기
-    search_pattern = os.path.join(base_dir, "*_embedded.jsonl")
+    search_pattern = os.path.join(base_dir, "data", "*_embedded.jsonl")
     files = glob.glob(search_pattern)
 
     if not files:
