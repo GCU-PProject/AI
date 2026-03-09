@@ -691,15 +691,102 @@ save_to_history(session_id, search_query, final_answer)    # 재구성: "교통�
 
 ---
 
+### 6.11 Streaming 응답 구현 (2026-03-09)
+
+기존 `/chat` 엔드포인트는 LLM이 전체 답변을 생성한 후 한꺼번에 반환하는 방식이었다. 이 경우 사용자는 답변이 완성될 때까지 빈 화면을 보게 된다. Streaming을 적용하면 LLM이 토큰을 생성하는 즉시 실시간으로 전송하여, 사용자가 첫 응답을 빠르게 받을 수 있다.
+
+#### 6.11.1 기존 방식 vs Streaming 방식
+
+| | 기존 `/chat` | 신규 `/chat/stream` |
+|---|---|---|
+| 서비스 함수 | `generate_answer` | `generate_answer_stream` |
+| LLM 호출 | `chain.ainvoke()` (한꺼번에) | `chain.astream()` (조각씩) |
+| 반환 방식 | `return { JSON }` | `yield "data: 조각"` (SSE) |
+| 엔드포인트 응답 | `CommonResponse` | `StreamingResponse` |
+| 사용자 체감 | 5~10초 대기 후 전체 답변 | 0.5초 만에 첫 줄, 이후 계속 추가 |
+
+#### 6.11.2 핵심 기술: `ainvoke()` vs `astream()`
+
+```python
+# 기존: 전체 답변이 완성될 때까지 기다림
+final_answer = await chain.ainvoke({"context": context, "question": query})
+
+# Streaming: 토큰이 생성될 때마다 즉시 전송
+async for chunk in chain.astream({"context": context, "question": query}):
+    yield f"data: {chunk}\n\n"
+```
+
+`ainvoke()`와 `astream()`은 LangChain 체인(`prompt | llm | StrOutputParser()`)의 내장 메서드이다. 별도 import 없이 체인 객체에서 바로 사용할 수 있다.
+
+#### 6.11.3 SSE(Server-Sent Events) 형식
+
+Streaming 응답은 SSE 표준 형식을 따른다. 일반 API 응답(JSON)과 달리 `data:` 접두사가 필수이다.
+
+```
+data: 음주운전은            ← 답변 텍스트 (프론트에서 화면 표시)
+data:  위험합니다.           ← 답변 텍스트 (계속 추가)
+data: [META]{"related_law_id_list": [68790], "search_success": true}  ← 메타데이터
+data: [DONE]                ← 종료 신호
+```
+
+프론트엔드는 이벤트 종류에 따라 분기 처리한다:
+- 일반 텍스트 → 화면에 실시간 표시
+- `[META]` → 메타데이터(법률 ID 등) 내부 저장
+- `[DONE]` → 스트리밍 연결 종료
+
+#### 6.11.4 `yield`와 `return`의 차이
+
+```python
+# return: 값 1개를 반환하고 함수 종료
+def normal():
+    return "전체 답변"    # ← 함수 끝!
+
+# yield: 값을 보내고 계속 진행 (제너레이터)
+async def streaming():
+    yield "첫 조각"      # ← 보내고 계속!
+    yield "둘째 조각"     # ← 또 보내고 계속!
+    yield "[DONE]"       # ← 마지막
+```
+
+`yield`는 값을 즉시 밖으로 전달하므로 버퍼링(flush) 없이 실시간 전송이 가능하다. FastAPI의 `StreamingResponse`가 `yield`된 값을 받아서 HTTP로 프론트엔드에 전송한다.
+
+#### 6.11.5 엔드포인트 구조
+
+```python
+from fastapi.responses import StreamingResponse
+
+@router.post("/chat/stream")
+async def chat_stream_endpoint(request, db):
+    return StreamingResponse(
+        generate_answer_stream(...),       # yield하는 함수
+        media_type="text/event-stream",    # SSE 형식 명시
+    )
+```
+
+`StreamingResponse`는 FastAPI 내장 응답 클래스로, 제너레이터 함수의 `yield` 값을 실시간으로 HTTP 전송한다. `media_type="text/event-stream"`은 프론트엔드에 "이 응답은 SSE 형식이다"라고 알려주는 역할을 한다.
+
+---
+
+### 6.12 수정 파일 요약 (2026-03-09)
+
+| 파일 | 변경 내용 |
+|------|-----------|
+| `v2_services/chat_service.py` | `generate_answer_stream()` 함수 추가 (astream + yield) |
+| `v2_services/chat_service.py` | `import json` 추가 |
+| `api/v2/endpoint/chat.py` | `/chat/stream` 엔드포인트 추가 |
+| `api/v2/endpoint/chat.py` | `StreamingResponse`, `generate_answer_stream` import 추가 |
+
+---
+
 ## 7. Phase 6 - 추가 고도화 (예정)
 
 | 우선순위 | 항목 | 설명 |
 |----------|------|------|
 | 중간 | Reranker 도입 | 벡터 검색 후 LLM 기반 관련성 재평가로 검색 품질 향상 |
 | 중간 | Hybrid Search | 벡터 검색 + 키워드 검색(BM25) 결합 |
-| 중간 | Streaming 응답 | LLM 응답을 실시간으로 전달하여 UX 개선 |
 | 중간 | 다국어 법률 데이터 확장 | 영국, 싱가포르 등 추가 국가 법률 데이터 구축 |
 | 낮음 | LangSmith 연동 | LangChain 체인 실행 과정 시각화 및 디버깅 |
 | 낮음 | 캐싱 | 동일 질문 반복 시 LLM 호출 없이 캐시 반환 (비용 절감) |
 | 낮음 | 평가 시스템 | RAGAS 등으로 RAG 품질 자동 측정 |
 | 낮음 | GCP VM 배포 | 운영 환경 구축 및 서비스 계정 인증 전환 |
+
