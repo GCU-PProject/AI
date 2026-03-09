@@ -28,7 +28,7 @@ v1에서는 Google Vertex AI SDK를 직접 호출하여 임베딩, 검색, 프�
     → 5단계: LLM(Gemini)이 근거 자료 기반으로 답변 생성
     → 6단계: API 응답 반환
 """
-
+import json
 from typing import Dict, Any, List, Optional
 from langchain_google_vertexai import VertexAIEmbeddings, ChatVertexAI
 from langchain_core.prompts import ChatPromptTemplate
@@ -446,3 +446,62 @@ async def generate_answer(
         "related_law_id_list": law_ids,
         "search_success": True,
     }
+
+
+async def generate_answer_stream(
+    query: str, db: AsyncSession, country_id: int, session_id: str = None
+):
+    """
+    [v2 Streaming] 답변을 실시간으로 전송하는 함수.
+    generate_answer와 동일하지만 ainvoke() 대신 astream()을 사용합니다.
+    """
+    print(f"🌍 [v2/LangChain] 국가 필터링 적용: ID {country_id}")
+
+    # 질문 재구성
+    search_query = query
+    if session_id:
+        search_query = await contextualize_question(query, session_id, llm)
+
+    # 번역
+    translated_query = await translate_query(search_query)
+
+    # 벡터 검색
+    docs, law_ids = await retrieve_laws(translated_query, country_id, db)
+
+    # 검색 결과 없을 시 안내
+    if not docs:
+        yield f"data: 죄송합니다. 질문하신 내용과 관련된 정확한 법률 정보를 찾을 수 없습니다. (관련도 낮음)\n\n"
+        meta = json.dumps(
+            {
+                "related_law_id_list": [],
+                "search_success": False,
+            }
+        )
+        yield f"data: [META]{meta}\n\n"
+        yield f"data: [DONE]\n\n"
+        return
+
+    # 컨텍스트 포맷
+    context = format_docs(docs)
+
+    # streaming 답변 생성
+    chain = prompt | llm | StrOutputParser()
+    full_answer = ""
+
+    async for chunk in chain.astream({"context": context, "question": query}):
+        full_answer += chunk
+        yield f"data: {chunk}\n\n"
+
+    # 대화 기록 저장
+    if session_id:
+        save_to_history(session_id, search_query, full_answer)
+
+    # 메타데이터 전송
+    meta = json.dumps(
+        {
+            "related_law_id_list": law_ids,
+            "search_success": True,
+        }
+    )
+    yield f"data: [META]{meta}\n\n"
+    yield f"data: [DONE]\n\n"
