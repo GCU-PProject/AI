@@ -33,6 +33,7 @@ RAG 시스템은 기본적으로 각 질문을 독립적으로 처리합니다.
 """
 
 from typing import Dict
+from langchain_core.prompts import load_prompt
 from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import StrOutputParser
@@ -99,19 +100,12 @@ def get_chat_history(session_id: str) -> ChatMessageHistory:
 # - few-shot 예시를 포함하여 LLM이 답변 대신 짧은 질문만 출력하도록 유도
 # - MessagesPlaceholder("chat_history"): 대화 기록이 이 자리에 삽입됨
 # - {input}: 사용자의 최신 질문이 삽입됨
-contextualize_prompt = ChatPromptTemplate.from_messages(
+
+contextualize_yaml = load_prompt("src/prompts/contextualize.yaml", encoding="utf-8")
+
+CONTEXTUALIZE_PROMPT = ChatPromptTemplate.from_messages(
     [
-        (
-            "system",
-            "Your ONLY job is to rewrite the user's latest message as a standalone question. "
-            "Output ONLY the rewritten question. No answers, no explanations, no extra text. "
-            "If the message is already standalone, return it exactly as-is.\n\n"
-            "Examples:\n"
-            "- Chat history about DUI penalties, user says '그러면 벌금은?' → '음주운전 벌금은 얼마인가요?'\n"
-            "- Chat history about speeding, user says '면허는?' → '과속으로 인한 면허 정지 기간은?'\n"
-            "- User says '교통사고 처벌이 뭐야?' (no relevant history) → '교통사고 처벌이 뭐야?'\n\n"
-            "Always respond in the same language as the user's question.",
-        ),
+        ("system", contextualize_yaml.template),
         MessagesPlaceholder("chat_history"),
         ("human", "{input}"),
     ]
@@ -143,7 +137,7 @@ async def contextualize_question(query: str, session_id: str, llm) -> str:
         return query
 
     # LCEL 체인: 프롬프트 → LLM → 텍스트 추출
-    chain = contextualize_prompt | llm | StrOutputParser()
+    chain = CONTEXTUALIZE_PROMPT | llm | StrOutputParser()
 
     # 최근 MEMORY_WINDOW_SIZE쌍만 사용 (슬라이딩 윈도우)
     recent_messages = history.messages[-(MEMORY_WINDOW_SIZE * 2) :]

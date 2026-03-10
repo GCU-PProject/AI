@@ -51,6 +51,7 @@ from typing import Dict, Any
 from langchain_google_vertexai import ChatVertexAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
+from langchain_core.prompts import load_prompt
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from src.core.models import Country
@@ -106,12 +107,6 @@ llm = ChatVertexAI(
 #
 # v2에서는 ChatPromptTemplate이 {variable}만 변수로 치환하므로
 # 일반 { }를 그대로 사용할 수 있습니다.
-#
-# [NO_DATA_MSG를 변수로 분리한 이유]
-# 프롬프트 안에서 "답변 불가" 메시지를 여러 번 참조해야 하는데,
-# 직접 문자열을 반복하면 오타 위험이 있으므로 상수로 분리했습니다.
-
-NO_DATA_MSG = "죄송합니다. 제공된 정보만으로는 답변하기 어렵습니다."
 
 # 비교 분석용 시스템 프롬프트
 # - {context_1}: 기준 국가의 검색된 법률 텍스트 (format_docs로 변환된 문자열)
@@ -122,31 +117,6 @@ NO_DATA_MSG = "죄송합니다. 제공된 정보만으로는 답변하기 어렵
 # NO_DATA_MSG를 문자열 결합(+)으로 프롬프트에 삽입하고 있습니다.
 # 이는 ChatPromptTemplate의 변수 치환({variable})과는 다른 방식으로,
 # 프롬프트 정의 시점에 이미 값이 고정됩니다.
-COMPARE_SYSTEM_PROMPT = (
-    """당신은 'Global Legal Assistant'입니다.
-전 세계 법률 정보를 바탕으로 두 국가의 법률을 객관적으로 비교 분석하는 법률 AI 전문가입니다.
-
-반드시 아래 제공된 [근거 자료]만을 바탕으로 답변을 작성하십시오. 외부 지식은 절대 사용하지 마십시오.
-
-[근거 자료 1 (기준 국가)]
-{context_1}
-
-[근거 자료 2 (비교 국가)]
-{context_2}
-
-[답변 작성 가이드라인]
-1. 답변 작성 전, 질문의 의도와 근거 자료의 핵심 주제가 일치하는지 반드시 대조하십시오.
-2. 주제가 불일치하거나 정보가 부족한 경우, 해당 필드에 \""""
-    + NO_DATA_MSG
-    + """\" 만을 입력하십시오.
-3. 주제가 일치하는 경우에만 각 국가의 법률 내용을 3~5문장 내외로 요약하십시오.
-4. 두 국가의 공통점(common)과 차이점(diff)을 명확한 논리로 도출하십시오.
-5. 각 요약과 분석의 마지막에 [참고 법령]으로 인용한 법률 코드를 나열하십시오. 본문에는 법률 코드를 넣지 마십시오.
-6. 근거 자료의 언어와 상관없이 반드시 자연스러운 한국어로 작성하십시오.
-
-반드시 아래 JSON 포맷으로만 응답하십시오:
-{format_instructions}"""
-)
 
 # JsonOutputParser: LLM의 응답을 자동으로 JSON(Python dict)으로 변환
 # - v1에서는 json.loads()로 수동 파싱했지만, 파싱 실패 시 에러 처리가 복잡했습니다.
@@ -158,9 +128,12 @@ parser = JsonOutputParser()
 # - ("system", COMPARE_SYSTEM_PROMPT): AI 역할, 근거 자료, 가이드라인 정의
 #   {context_1}, {context_2}, {format_instructions}는 실행 시 치환됨
 # - ("human", "{question}"): 사용자의 원본 질문 (한국어 그대로)
-prompt = ChatPromptTemplate.from_messages(
+
+compare_yaml = load_prompt("src/prompts/compare.yaml", encoding="utf-8")
+
+COMPARE_PROMPT = ChatPromptTemplate.from_messages(
     [
-        ("system", COMPARE_SYSTEM_PROMPT),
+        ("system", compare_yaml.template),
         ("human", "{question}"),
     ]
 )
@@ -281,7 +254,7 @@ async def compare_laws(
     # [chat_service와의 차이]
     # - chat_service: prompt | llm | StrOutputParser() → 문자열 반환
     # - compare_service: prompt | llm | parser(JsonOutputParser) → dict 반환
-    chain = prompt | llm | parser
+    chain = COMPARE_PROMPT | llm | parser
 
     # format_instructions: LLM에게 출력해야 할 JSON 구조를 알려주는 예시
     # 이 텍스트가 프롬프트의 {format_instructions} 자리에 삽입됩니다.
