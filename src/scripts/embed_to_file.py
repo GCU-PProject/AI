@@ -43,6 +43,7 @@ async def step1_embed_to_file():
         "law_data_HSC.jsonl",
         "law_data_EDC.jsonl",
         "law_data_VEH.jsonl",
+        "law_data_AU.jsonl",
     ]
 
     # 파일 존재 여부 확인 (리스트 사용 시 glob과 달리 직접 확인 필요)

@@ -23,7 +23,8 @@ from src.core.models import Law
 # 2. 전역 설정
 # ------------------------------------------------------------------------------
 DATABASE_URL = settings.ASYNC_DATABASE_URL
-TARGET_COUNTRY_ID = 1
+# 파일명 기반으로 국가 ID 부여할 것이므로 고정 변수는 사용하지 않음
+# TARGET_COUNTRY_ID = 1
 
 
 async def step2_load_to_db():
@@ -76,10 +77,15 @@ async def step2_load_to_db():
                         continue
                     row = json.loads(line)
 
+                    # 파일명에 따라 country_id 할당
+                    country_id = 1
+                    if "AU" in filename:
+                        country_id = 2
+
                     # (B) Law 객체 생성 (로직 유지)
                     # 1단계 파일에서 'embedding' 값을 가져옵니다.
                     law_obj = Law(
-                        country_id=TARGET_COUNTRY_ID,
+                        country_id=country_id,
                         law_type=row.get("law_code"),
                         section_title=row.get("category"),
                         article_no=row.get("article_no"),
