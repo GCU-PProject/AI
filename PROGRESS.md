@@ -101,25 +101,33 @@ GLAW(Global Law) AI는 전 세계 법률 정보를 AI로 검색하고 비교할 
 
 ### 3.4 데이터베이스 스키마
 
-#### `test_countries` 테이블 (국가 정보)
+#### `countries` 테이블 (국가 및 지역 정보)
 
 | 컬럼 | 타입 | 설명 |
 |------|------|------|
-| `country_id` | BigInteger (PK) | 국가 고유 ID |
+| `country_id` | BigInteger (PK) | 국가/지역 고유 ID |
 | `country_code` | String(10) | 국가 코드 (예: US, GB) |
 | `country_name` | String(100) | 국가명 |
+| `state_code` | String(10) | 주/지역 코드 (예: CA, NY) |
+| `state_name` | String(100) | 주/지역명 |
+| `created_at` | DateTime(timezone=True) | 데이터 생성 시각 |
+| `updated_at` | DateTime(timezone=True) | 데이터 수정 시각 |
 
 #### `laws` 테이블 (법률 데이터)
 
 | 컬럼 | 타입 | 설명 |
 |------|------|------|
 | `law_id` | BigInteger (PK) | 법률 고유 ID |
-| `country_id` | BigInteger (FK) | 국가 ID |
+| `country_id` | BigInteger (FK) | 국가 ID (countries 테이블 참조) |
 | `law_type` | String(20) | 법률 종류 (예: VEH, PEN, CIV) |
 | `section_title` | String | 목차/카테고리 (예: CHAPTER 1. Reports) |
 | `article_no` | String | 조항 번호 (예: 23152.) |
 | `content` | Text | 법률 본문 |
 | `source_url` | String | 출처 URL |
+| `enactment_date` | DateTime | 제정일 |
+| `amendment_date` | DateTime | 개정일 |
+| `created_at` | DateTime(timezone=True) | 데이터 생성 시각 |
+| `updated_at` | DateTime(timezone=True) | 데이터 수정 시각 |
 | `embedding` | Vector(768) | 임베딩 벡터 (text-embedding-005) |
 
 ---
