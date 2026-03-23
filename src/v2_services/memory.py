@@ -11,7 +11,7 @@ RAG 시스템은 기본적으로 각 질문을 독립적으로 처리합니다.
 "그러면"이 무엇을 가리키는지 알 수 없어 검색이 실패합니다.
 
 이 모듈은 대화 기록을 보고 후속 질문을 독립적인 질문으로 재구성합니다.
-예: "그러면 벌금은?" → "캘리포니아 음주운전(DUI)의 벌금은 얼마인가?"
+예: "그러면 벌금은?" → "캘리포니아 음주운전의 벌금은 얼마인가?"
 
 [핵심 구성 요소]
 1. chat_histories (딕셔너리): session_id별 대화 기록 저장소
@@ -54,6 +54,12 @@ from langchain_core.output_parsers import StrOutputParser
 # - add_user_message(), add_ai_message()로 메시지 추가
 chat_histories: Dict[str, ChatMessageHistory] = {}
 
+# 슬라이딩 윈도우 크기: 질문 재구성 시 참고할 최근 대화 쌍 수
+# - 3쌍(6개 메시지) = 직전 3번의 질문/답변만 참고
+# - 너무 크면: 오래된 주제가 섞여 재구성 품질 저하
+# - 너무 작으면: 맥락 유지 부족
+MEMORY_WINDOW_SIZE = 3
+
 
 def get_chat_history(session_id: str) -> ChatMessageHistory:
     """
@@ -90,17 +96,20 @@ def get_chat_history(session_id: str) -> ChatMessageHistory:
 # 대신 LLM에게 "핵심만 뽑아서 검색용 질문으로 바꿔줘"라고 요청합니다.
 
 # 질문 재구성용 프롬프트
+# - few-shot 예시를 포함하여 LLM이 답변 대신 짧은 질문만 출력하도록 유도
 # - MessagesPlaceholder("chat_history"): 대화 기록이 이 자리에 삽입됨
 # - {input}: 사용자의 최신 질문이 삽입됨
 contextualize_prompt = ChatPromptTemplate.from_messages(
     [
         (
             "system",
-            "Given a chat history and the latest user question "
-            "which might reference context in the chat history, "
-            "formulate a standalone question which can be understood "
-            "without the chat history. Do NOT answer the question, "
-            "just reformulate it if needed and otherwise return it as is. "
+            "Your ONLY job is to rewrite the user's latest message as a standalone question. "
+            "Output ONLY the rewritten question. No answers, no explanations, no extra text. "
+            "If the message is already standalone, return it exactly as-is.\n\n"
+            "Examples:\n"
+            "- Chat history about DUI penalties, user says '그러면 벌금은?' → '음주운전 벌금은 얼마인가요?'\n"
+            "- Chat history about speeding, user says '면허는?' → '과속으로 인한 면허 정지 기간은?'\n"
+            "- User says '교통사고 처벌이 뭐야?' (no relevant history) → '교통사고 처벌이 뭐야?'\n\n"
             "Always respond in the same language as the user's question.",
         ),
         MessagesPlaceholder("chat_history"),
@@ -136,13 +145,21 @@ async def contextualize_question(query: str, session_id: str, llm) -> str:
     # LCEL 체인: 프롬프트 → LLM → 텍스트 추출
     chain = contextualize_prompt | llm | StrOutputParser()
 
-    # 대화 기록과 현재 질문을 함께 전달하여 질문 재구성
+    # 최근 MEMORY_WINDOW_SIZE쌍만 사용 (슬라이딩 윈도우)
+    recent_messages = history.messages[-(MEMORY_WINDOW_SIZE * 2) :]
+
     contextualized = await chain.ainvoke(
         {
-            "chat_history": history.messages,
+            "chat_history": recent_messages,
             "input": query,
         }
     )
+
+    # 안전장치: 재구성 결과가 비어있으면 원본 질문을 그대로 사용
+    # (토큰 제한 등으로 LLM이 빈 문자열을 반환하는 경우 방지)
+    if not contextualized or not contextualized.strip():
+        print(f"⚠️ 질문 재구성 결과가 비어있어 원본 질문을 사용합니다: '{query}'")
+        return query
 
     print(f"💬 질문 재구성: '{query}' → '{contextualized}'")
     return contextualized

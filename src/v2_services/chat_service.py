@@ -59,7 +59,7 @@ TOP_K = 5
 # - 이 값보다 거리가 큰 문서는 관련성이 낮다고 판단하여 제외합니다.
 # - 예: 질문 "음주운전 처벌"과 문서 "주차 위반"의 거리가 0.92라면,
 #        0.92 > 0.85 이므로 이 문서는 검색 결과에서 제외됩니다.
-MAX_DISTANCE_THRESHOLD = 0.85
+MAX_DISTANCE_THRESHOLD = 0.90
 
 # =========================================================
 # 2. AI 모델 초기화
@@ -100,7 +100,7 @@ llm = ChatVertexAI(
     project=settings.GCP_PROJECT_ID,
     location=settings.GCP_LOCATION,
     temperature=0,
-    max_output_tokens=1024,
+    max_output_tokens=2048,
     top_k=20,
     top_p=0.7,
 )
@@ -154,10 +154,16 @@ async def translate_query(query: str) -> str:
         이 파이프라인은 | (파이프) 연산자로 각 단계를 연결합니다.
         데이터가 왼쪽에서 오른쪽으로 순차적으로 흐릅니다.
     """
-    chain = translation_prompt | llm | StrOutputParser()
-    translated = await chain.ainvoke({"query": query})
-    print(f"🔄 번역: '{query}' → '{translated}'")
-    return translated
+    try:
+        chain = translation_prompt | llm | StrOutputParser()
+        translated = await chain.ainvoke({"query": query})
+        if not translated or not translated.strip():
+            raise ValueError("번역 결과가 없습니다.")
+        print(f"🔄 번역: '{query}' → '{translated}'")
+        return translated
+    except Exception as e:
+        print(f"번역 실패: {str(e)}")
+        raise
 
 
 # =========================================================
@@ -432,7 +438,7 @@ async def generate_answer(
     # session_id가 있으면 이번 질문/답변을 대화 기록에 추가
     # 다음 요청에서 contextualize_question()이 이 기록을 참고합니다.
     if session_id:
-        save_to_history(session_id, query, final_answer)
+        save_to_history(session_id, search_query, final_answer)
 
     # ----- Step 7: 결과 반환 -----
     return {

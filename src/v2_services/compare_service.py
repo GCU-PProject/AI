@@ -247,28 +247,31 @@ async def compare_laws(
     #
     # 에러 메시지에는 어떤 국가에서 데이터를 찾지 못했는지 명시합니다.
     # 예: "United States (California)의 관련 법률 데이터를 찾을 수 없습니다."
-    if not docs_1 or not docs_2:
-        missing = []
-        if not docs_1:
-            # country_map.get(id, str(id)): 매핑에 없을 경우 ID 숫자를 대신 표시
-            missing.append(country_map.get(country_id_1, str(country_id_1)))
-        if not docs_2:
-            missing.append(country_map.get(country_id_2, str(country_id_2)))
-
-        error_msg = f"{', '.join(missing)}의 관련 법률 데이터를 찾을 수 없습니다."
+    if not docs_1 and not docs_2:
 
         return {
             "search_success": False,
             "country_1_result": {"related_law_ids": [], "summary": "자료 없음"},
             "country_2_result": {"related_law_ids": [], "summary": "자료 없음"},
-            "compare_summary": {"common": error_msg, "diff": ""},
+            "compare_summary": {
+                "common": "두 국가 모두 관련 법률 데이터를 찾을 수 없습니다.",
+                "diff": "",
+            },
         }
 
-    # ----- Step 5: 컨텍스트 포맷 -----
-    # 검색된 Document 리스트를 프롬프트에 삽입할 텍스트로 변환합니다.
-    # chat_service의 format_docs()를 재사용합니다.
-    context_1 = format_docs(docs_1)
-    context_2 = format_docs(docs_2)
+    if not docs_1:
+        country_1_name = country_map.get(country_id_1, str(country_id_1))
+        context_1_text = f"{country_1_name}의 관련 법률 데이터를 찾을 수 없습니다."
+
+    else:
+        context_1_text = format_docs(docs_1)
+
+    if not docs_2:
+        country_2_name = country_map.get(country_id_2, str(country_id_2))
+        context_2_text = f"{country_2_name}의 관련 법률 데이터를 찾을 수 없습니다."
+
+    else:
+        context_2_text = format_docs(docs_2)
 
     # ----- Step 6: LCEL 체인 실행 (비교 분석) -----
     # LCEL 파이프라인:
@@ -303,8 +306,8 @@ async def compare_laws(
     try:
         analysis = await chain.ainvoke(
             {
-                "context_1": context_1,
-                "context_2": context_2,
+                "context_1": context_1_text,
+                "context_2": context_2_text,
                 "question": query,
                 "format_instructions": format_instructions,
             }

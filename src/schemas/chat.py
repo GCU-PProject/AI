@@ -15,7 +15,7 @@ Python의 데이터 검증 라이브러리입니다.
 - ChatResult: CommonResponse의 result 필드에 들어가는 응답 데이터
 """
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import List, Optional
 
 
@@ -31,6 +31,12 @@ class ChatRequest(BaseModel):
     # - 같은 session_id로 요청하면 이전 대화를 기억합니다.
     # - None이면 맥락 없이 단독 질문으로 처리합니다. (기존 동작과 동일)
     session_id: Optional[str] = None
+
+    @field_validator("query")
+    def check_query(cls, v):
+        if not v or not v.strip():
+            raise ValueError("질문을 입력해주세요.")
+        return v
 
 
 # ---------------------------------------------------

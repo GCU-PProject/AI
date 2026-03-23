@@ -19,7 +19,7 @@ CompareResult
 표시할 수 있도록 데이터를 구조화했습니다.
 """
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator, model_validator
 from typing import List
 
 
@@ -30,6 +30,18 @@ class CompareRequest(BaseModel):
     query: str  # 비교할 주제 (예: "음주운전 처벌 비교해줘")
     country_id_1: int  # 기준 국가 ID (예: 1)
     country_id_2: int  # 비교 국가 ID (예: 2)
+
+    @field_validator("query")
+    def check_query(cls, v):
+        if not v or not v.strip():
+            raise ValueError("질문을 입력해주세요.")
+        return v
+
+    @model_validator(mode="after")
+    def check_country_ids(self):
+        if self.country_id_1 == self.country_id_2:
+            raise ValueError("두 국가 ID가 같습니다.")
+        return self
 
 
 # ---------------------------------------------------
