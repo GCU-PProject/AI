@@ -43,7 +43,10 @@ async def chat_endpoint(request: ChatRequest, db: AsyncSession = Depends(get_db)
     """
     try:
         result_data = await generate_answer(
-            query=request.query, db=db, country_id=request.country_id
+            query=request.query,
+            db=db,
+            country_id=request.country_id,
+            session_id=request.session_id,
         )
 
         chat_result = ChatResult(**result_data)

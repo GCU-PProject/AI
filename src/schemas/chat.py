@@ -16,7 +16,7 @@ Python의 데이터 검증 라이브러리입니다.
 """
 
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 
 
 # ---------------------------------------------------
@@ -25,6 +25,12 @@ from typing import List
 class ChatRequest(BaseModel):
     query: str  # 사용자의 법률 질문 (예: "음주운전 하면 면허가 정지되나요?")
     country_id: int  # 검색 대상 국가 ID (예: 1: California, 2: New York)
+
+    # 대화 세션 ID (대화 맥락 기억 기능용)
+    # - 프론트엔드에서 UUID를 생성하여 전달합니다.
+    # - 같은 session_id로 요청하면 이전 대화를 기억합니다.
+    # - None이면 맥락 없이 단독 질문으로 처리합니다. (기존 동작과 동일)
+    session_id: Optional[str] = None
 
 
 # ---------------------------------------------------
