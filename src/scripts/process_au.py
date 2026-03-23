@@ -101,7 +101,7 @@ def export_to_jsonl():
     print("🔄 텍스트 분류 및 law_data JSONL 형식 매핑 중...")
     
     output_filename = "law_data_AU.jsonl"
-    map_id_counter = 1
+    processed_count = 0
     
     # 호주 관할권별 임의의 country_id 매핑 딕셔너리
     jurisdiction_map = {
@@ -130,18 +130,17 @@ def export_to_jsonl():
             sections = split_into_articles(text)
             for sec in sections:
                 row = {
-                    "map_id": map_id_counter,
-                    "country_id": country_id,  # laws 테이블의 country_id 필드와 조인될 수 있도록 변경
-                    "law_code": law_code,
-                    "category": section_title,
+                    "country_id": country_id,  # laws 테이블의 country_id 필드와 조인
+                    "law_type": law_code,
+                    "section_title": section_title,
                     "article_no": sec["article_no"],
                     "content": sec["content"],
-                    "url": url
+                    "source_url": url
                 }
                 f_out.write(json.dumps(row, ensure_ascii=False) + "\n")
-                map_id_counter += 1
+                processed_count += 1
 
-    print(f"✅ '{output_filename}' 파일이 생성되었습니다. (총 {map_id_counter-1}개 조항 매핑 완료)")
+    print(f"✅ '{output_filename}' 파일이 생성되었습니다. (총 {processed_count}개 조항 매핑 완료)")
 
 if __name__ == "__main__":
     export_to_jsonl()
