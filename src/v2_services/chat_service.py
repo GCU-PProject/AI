@@ -36,6 +36,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.documents import Document
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from langchain_core.prompts import load_prompt
 from src.core.models import Law
 from src.core.config import settings
 from src.v2_services.memory import contextualize_question, save_to_history
@@ -100,7 +101,7 @@ llm = ChatVertexAI(
     project=settings.GCP_PROJECT_ID,
     location=settings.GCP_LOCATION,
     temperature=0,
-    max_output_tokens=2048,
+    max_output_tokens=4096,
     top_k=20,
     top_p=0.7,
 )
@@ -128,14 +129,12 @@ llm = ChatVertexAI(
 # - from_messages(): 대화 형식(system/human)으로 프롬프트를 구성
 # - system 메시지: AI의 역할과 규칙을 정의
 # - human 메시지: 사용자의 입력. {query}는 실행 시 실제 질문으로 치환됨
-translation_prompt = ChatPromptTemplate.from_messages(
+
+translation_yaml = load_prompt("src/prompts/translation.yaml", encoding="utf-8")
+
+TRANSLATION_PROMPT = ChatPromptTemplate.from_messages(
     [
-        (
-            "system",
-            "You are a translator. Translate the user's message to English. "
-            "Output ONLY the translated text, nothing else. "
-            "If the message is already in English, return it as-is.",
-        ),
+        ("system", translation_yaml.template),
         ("human", "{query}"),
     ]
 )
@@ -155,7 +154,7 @@ async def translate_query(query: str) -> str:
         데이터가 왼쪽에서 오른쪽으로 순차적으로 흐릅니다.
     """
     try:
-        chain = translation_prompt | llm | StrOutputParser()
+        chain = TRANSLATION_PROMPT | llm | StrOutputParser()
         translated = await chain.ainvoke({"query": query})
         if not translated or not translated.strip():
             raise ValueError("번역 결과가 없습니다.")
@@ -185,46 +184,14 @@ async def translate_query(query: str) -> str:
 # 3. 인용 방식:
 #    - 본문에 법률 코드가 섞이면 가독성이 떨어지므로, [참고 법령] 섹션으로 분리
 
-SYSTEM_PROMPT = """당신은 'Global Legal Assistant'입니다.
-전 세계 법률 정보를 바탕으로 사용자에게 정확하고 신뢰할 수 있는 정보를 제공하는 법률 AI 전문가입니다.
-
-반드시 아래 제공된 법률 조항만을 바탕으로 답변을 작성하십시오. 외부 지식은 절대 사용하지 마십시오.
-
---- 관련 법률 조항 ---
-{context}
-
-[답변 작성 가이드라인]
-1. 가장 먼저 제공된 법률 조항이 질문의 주제와 일치하는지 판단하십시오.
-2. 만약 제공된 법률 조항이 질문과 관련이 없다면, "죄송합니다. 제공된 정보만으로는 답변하기 어렵습니다."라고만 답변하십시오.
-3. 답변이 가능한 경우, 핵심 내용만 간결하게 3~5문장 내외로 요약하십시오.
-4. 답변의 모든 내용은 제공된 법률 조항에 있는 내용이어야 합니다. 없는 내용은 절대 지어내지 마십시오.
-5. 답변 본문에는 법률 코드를 넣지 마십시오. 대신 답변 마지막에 [참고 법령] 섹션을 만들어 인용한 법률 코드를 나열하십시오.
-6. 사용자의 질문이 한국어라면, 근거 자료가 영어일지라도 반드시 자연스러운 한국어로 번역하여 답변하십시오.
-7. 답변을 제공한 경우에만 마지막에 "※ 본 답변은 법률적 조언이 아니며 정보 제공을 목적으로 합니다."를 포함하십시오.
-
-[답변 형식]
-반드시 아래 형식을 따르십시오:
-
-- 질문에 답할 수 있는 경우:
-
-**결론:** (핵심을 1문장으로 명확하게 제시)
-
-**상세 내용:** (법률 조항을 근거로 2~4문장 요약, 본문에 법률 코드 넣지 않기)
-
-**[참고 법령]:** VEH 23123, CIV 1950.7(c) 등
-
-※ 본 답변은 법률적 조언이 아니며 정보 제공을 목적으로 합니다.
-
-- 질문에 답할 수 없는 경우:
-    "죄송합니다. 제공된 정보만으로는 답변하기 어렵습니다."
-"""
+chat_yaml = load_prompt("src/prompts/chat.yaml", encoding="utf-8")
 
 # ChatPromptTemplate: LangChain에서 LLM에 전달할 프롬프트를 구조화하는 클래스
 # - ("system", SYSTEM_PROMPT): AI의 역할과 규칙 정의. {context}는 검색된 법률 텍스트로 치환
 # - ("human", "{question}"): 사용자의 원본 질문. 한국어 그대로 전달하여 한국어 답변 유도
-prompt = ChatPromptTemplate.from_messages(
+CHAT_PROMPT = ChatPromptTemplate.from_messages(
     [
-        ("system", SYSTEM_PROMPT),
+        ("system", chat_yaml.template),
         ("human", "{question}"),
     ]
 )
@@ -430,7 +397,7 @@ async def generate_answer(
     # ※ 여기서는 번역본이 아닌 원본 질문(query)을 전달합니다.
     #   이유: 사용자가 한국어로 질문했으면 한국어로 답변해야 하므로,
     #         LLM에게는 원본 한국어 질문을 전달하여 답변 언어를 맞춥니다.
-    chain = prompt | llm | StrOutputParser()
+    chain = CHAT_PROMPT | llm | StrOutputParser()
 
     final_answer = await chain.ainvoke({"context": context, "question": query})
 
@@ -449,7 +416,7 @@ async def generate_answer(
 
 
 async def generate_answer_stream(
-    query: str, db: AsyncSession, country_id: int, session_id: str = None
+    query: str, db: AsyncSession, country_id: int, session_id: Optional[str] = None
 ):
     """
     [v2 Streaming] 답변을 실시간으로 전송하는 함수.
@@ -457,51 +424,61 @@ async def generate_answer_stream(
     """
     print(f"🌍 [v2/LangChain] 국가 필터링 적용: ID {country_id}")
 
-    # 질문 재구성
-    search_query = query
-    if session_id:
-        search_query = await contextualize_question(query, session_id, llm)
+    try:
+        # 질문 재구성
+        search_query = query
+        if session_id:
+            search_query = await contextualize_question(query, session_id, llm)
 
-    # 번역
-    translated_query = await translate_query(search_query)
+        # 번역
+        translated_query = await translate_query(search_query)
 
-    # 벡터 검색
-    docs, law_ids = await retrieve_laws(translated_query, country_id, db)
+        # 벡터 검색
+        docs, law_ids = await retrieve_laws(translated_query, country_id, db)
 
-    # 검색 결과 없을 시 안내
-    if not docs:
-        yield f"data: 죄송합니다. 질문하신 내용과 관련된 정확한 법률 정보를 찾을 수 없습니다. (관련도 낮음)\n\n"
+        # 검색 결과 없을 시 안내
+        if not docs:
+            yield f"data: 죄송합니다. 질문하신 내용과 관련된 정확한 법률 정보를 찾을 수 없습니다. (관련도 낮음)\n\n"
+            meta = json.dumps(
+                {
+                    "related_law_id_list": [],
+                    "search_success": False,
+                }
+            )
+            yield f"data: [META]{meta}\n\n"
+            yield f"data: [DONE]\n\n"
+            return
+
+        # 컨텍스트 포맷
+        context = format_docs(docs)
+
+        # streaming 답변 생성
+        chain = CHAT_PROMPT | llm | StrOutputParser()
+        full_answer = ""
+
+        async for chunk in chain.astream({"context": context, "question": query}):
+            full_answer += chunk
+            yield f"data: {chunk}\n\n"
+
+        # 대화 기록 저장
+        if session_id:
+            save_to_history(session_id, search_query, full_answer)
+
+        # 메타데이터 전송
         meta = json.dumps(
             {
-                "related_law_id_list": [],
-                "search_success": False,
+                "related_law_id_list": law_ids,
+                "search_success": True,
             }
         )
         yield f"data: [META]{meta}\n\n"
         yield f"data: [DONE]\n\n"
-        return
 
-    # 컨텍스트 포맷
-    context = format_docs(docs)
+    except Exception as e:
+        import traceback
 
-    # streaming 답변 생성
-    chain = prompt | llm | StrOutputParser()
-    full_answer = ""
-
-    async for chunk in chain.astream({"context": context, "question": query}):
-        full_answer += chunk
-        yield f"data: {chunk}\n\n"
-
-    # 대화 기록 저장
-    if session_id:
-        save_to_history(session_id, search_query, full_answer)
-
-    # 메타데이터 전송
-    meta = json.dumps(
-        {
-            "related_law_id_list": law_ids,
-            "search_success": True,
-        }
-    )
-    yield f"data: [META]{meta}\n\n"
-    yield f"data: [DONE]\n\n"
+        traceback.print_exc()
+        # 오류 메시지 중에 줄바꿈이 있으면 SSE 포맷이 깨질 수 있으므로 제거/치환
+        error_msg = str(e).replace("\\n", " ")
+        yield f"data: [ERROR] 스트리밍 중 오류가 발생했습니다: {error_msg}\n\n"
+        yield f"data: [DONE]\n\n"
