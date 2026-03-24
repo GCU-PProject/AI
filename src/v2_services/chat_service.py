@@ -476,9 +476,8 @@ async def generate_answer_stream(
 
     except Exception as e:
         import traceback
-
         traceback.print_exc()
         # 오류 메시지 중에 줄바꿈이 있으면 SSE 포맷이 깨질 수 있으므로 제거/치환
-        error_msg = str(e).replace("\\n", " ")
+        error_msg = str(e).replace('\n', ' ')
         yield f"data: [ERROR] 스트리밍 중 오류가 발생했습니다: {error_msg}\n\n"
         yield f"data: [DONE]\n\n"
