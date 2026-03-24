@@ -424,51 +424,60 @@ async def generate_answer_stream(
     """
     print(f"🌍 [v2/LangChain] 국가 필터링 적용: ID {country_id}")
 
-    # 질문 재구성
-    search_query = query
-    if session_id:
-        search_query = await contextualize_question(query, session_id, llm)
+    try:
+        # 질문 재구성
+        search_query = query
+        if session_id:
+            search_query = await contextualize_question(query, session_id, llm)
 
-    # 번역
-    translated_query = await translate_query(search_query)
+        # 번역
+        translated_query = await translate_query(search_query)
 
-    # 벡터 검색
-    docs, law_ids = await retrieve_laws(translated_query, country_id, db)
+        # 벡터 검색
+        docs, law_ids = await retrieve_laws(translated_query, country_id, db)
 
-    # 검색 결과 없을 시 안내
-    if not docs:
-        yield f"data: 죄송합니다. 질문하신 내용과 관련된 정확한 법률 정보를 찾을 수 없습니다. (관련도 낮음)\n\n"
+        # 검색 결과 없을 시 안내
+        if not docs:
+            yield f"data: 죄송합니다. 질문하신 내용과 관련된 정확한 법률 정보를 찾을 수 없습니다. (관련도 낮음)\n\n"
+            meta = json.dumps(
+                {
+                    "related_law_id_list": [],
+                    "search_success": False,
+                }
+            )
+            yield f"data: [META]{meta}\n\n"
+            yield f"data: [DONE]\n\n"
+            return
+
+        # 컨텍스트 포맷
+        context = format_docs(docs)
+
+        # streaming 답변 생성
+        chain = CHAT_PROMPT | llm | StrOutputParser()
+        full_answer = ""
+
+        async for chunk in chain.astream({"context": context, "question": query}):
+            full_answer += chunk
+            yield f"data: {chunk}\n\n"
+
+        # 대화 기록 저장
+        if session_id:
+            save_to_history(session_id, search_query, full_answer)
+
+        # 메타데이터 전송
         meta = json.dumps(
             {
-                "related_law_id_list": [],
-                "search_success": False,
+                "related_law_id_list": law_ids,
+                "search_success": True,
             }
         )
         yield f"data: [META]{meta}\n\n"
         yield f"data: [DONE]\n\n"
-        return
 
-    # 컨텍스트 포맷
-    context = format_docs(docs)
-
-    # streaming 답변 생성
-    chain = CHAT_PROMPT | llm | StrOutputParser()
-    full_answer = ""
-
-    async for chunk in chain.astream({"context": context, "question": query}):
-        full_answer += chunk
-        yield f"data: {chunk}\n\n"
-
-    # 대화 기록 저장
-    if session_id:
-        save_to_history(session_id, search_query, full_answer)
-
-    # 메타데이터 전송
-    meta = json.dumps(
-        {
-            "related_law_id_list": law_ids,
-            "search_success": True,
-        }
-    )
-    yield f"data: [META]{meta}\n\n"
-    yield f"data: [DONE]\n\n"
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        # 오류 메시지 중에 줄바꿈이 있으면 SSE 포맷이 깨질 수 있으므로 제거/치환
+        error_msg = str(e).replace('\\n', ' ')
+        yield f"data: [ERROR] 스트리밍 중 오류가 발생했습니다: {error_msg}\n\n"
+        yield f"data: [DONE]\n\n"
