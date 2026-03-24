@@ -32,7 +32,7 @@ RAG 시스템은 기본적으로 각 질문을 독립적으로 처리합니다.
 - 향후: DB(PostgreSQL)에 저장하도록 이 파일만 수정하면 됨
 """
 
-from typing import Dict
+from typing import Dict, Optional
 from langchain_core.prompts import load_prompt
 from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -62,7 +62,7 @@ chat_histories: Dict[str, ChatMessageHistory] = {}
 MEMORY_WINDOW_SIZE = 3
 
 
-def get_chat_history(session_id: str) -> ChatMessageHistory:
+def get_chat_history(session_id: Optional[str]) -> ChatMessageHistory:
     """
     session_id에 해당하는 대화 기록을 반환합니다.
     처음 요청하는 session_id면 빈 대화 기록을 새로 생성합니다.
@@ -73,6 +73,9 @@ def get_chat_history(session_id: str) -> ChatMessageHistory:
     Returns:
         ChatMessageHistory 객체 (messages 리스트 포함)
     """
+    if session_id is None:
+        return ChatMessageHistory()
+
     if session_id not in chat_histories:
         chat_histories[session_id] = ChatMessageHistory()
     return chat_histories[session_id]
@@ -112,7 +115,7 @@ CONTEXTUALIZE_PROMPT = ChatPromptTemplate.from_messages(
 )
 
 
-async def contextualize_question(query: str, session_id: str, llm) -> str:
+async def contextualize_question(query: str, session_id: Optional[str], llm) -> str:
     """
     대화 기록을 참고하여 후속 질문을 독립적인 질문으로 재구성합니다.
 
@@ -130,6 +133,9 @@ async def contextualize_question(query: str, session_id: str, llm) -> str:
     첫 질문: "음주운전 처벌?" → 대화 기록 없음 → "음주운전 처벌?" (그대로)
     후속:    "벌금은?"       → 대화 기록 참고 → "캘리포니아 음주운전 벌금?" (재구성)
     """
+    if session_id is None:
+        return query
+
     history = get_chat_history(session_id)
 
     # 대화 기록이 비어있으면 (첫 질문) 재구성할 필요 없음
@@ -164,7 +170,7 @@ async def contextualize_question(query: str, session_id: str, llm) -> str:
 # =========================================================
 
 
-def save_to_history(session_id: str, query: str, answer: str) -> None:
+def save_to_history(session_id: Optional[str], query: str, answer: str) -> None:
     """
     질문과 답변을 대화 기록에 저장합니다.
 
@@ -176,6 +182,9 @@ def save_to_history(session_id: str, query: str, answer: str) -> None:
         query: 사용자의 원본 질문
         answer: AI가 생성한 답변
     """
+    if session_id is None:
+        return
+
     history = get_chat_history(session_id)
     history.add_user_message(query)
     history.add_ai_message(answer)
