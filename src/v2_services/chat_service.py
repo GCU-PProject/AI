@@ -101,7 +101,7 @@ llm = ChatVertexAI(
     project=settings.GCP_PROJECT_ID,
     location=settings.GCP_LOCATION,
     temperature=0,
-    max_output_tokens=2048,
+    max_output_tokens=4096,
     top_k=20,
     top_p=0.7,
 )
