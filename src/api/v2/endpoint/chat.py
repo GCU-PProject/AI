@@ -28,8 +28,9 @@ from src.schemas.common import CommonResponse
 from src.schemas.chat import ChatRequest, ChatResult
 from src.schemas.compare import CompareRequest, CompareResult
 from src.core.models import Country
-from src.v2_services.chat_service import generate_answer
+from src.v2_services.chat_service import generate_answer, generate_answer_stream
 from src.v2_services.compare_service import compare_laws
+from fastapi.responses import StreamingResponse
 
 
 router = APIRouter()
@@ -94,6 +95,35 @@ async def chat_endpoint(request: ChatRequest, db: AsyncSession = Depends(get_db)
             message="서버 내부 오류가 발생했습니다.",
             result=None,
         )
+
+
+@router.post("/chat/stream")
+async def chat_stream_endpoint(
+    request: ChatRequest, db: AsyncSession = Depends(get_db)
+):
+    """
+    [v2 Streaming] 법률 Q&A 챗봇 API (실시간 응답)
+    """
+    country = await db.execute(
+        select(Country).where(Country.country_id == request.country_id)
+    )
+    if not country.scalar():
+        return CommonResponse(
+            isSuccess=False,
+            code="AI404",
+            message=f"존재하지 않는 국가 ID입니다: {request.country_id}",
+            result=None,
+        )
+
+    return StreamingResponse(
+        generate_answer_stream(
+            query=request.query,
+            db=db,
+            country_id=request.country_id,
+            session_id=request.session_id,
+        ),
+        media_type="text/event-stream",
+    )
 
 
 @router.post("/compare", response_model=CommonResponse)
