@@ -103,6 +103,13 @@ class Settings(BaseSettings):
         extra = "ignore"  # .env에 Settings에 정의되지 않은 변수가 있어도 무시
 
 
+import os
+
 # 설정 인스턴스 생성 (모듈 로드 시 1회 실행)
 # 다른 파일에서 from src.core.config import settings 로 가져다 씁니다.
 settings = Settings()
+
+# Google Cloud SDK 인증을 위해 환경변수에 명시적으로 등록합니다.
+# pydantic-settings는 객체에만 값을 저장할뿐 os.environ에 주입하지 않기 때문입니다.
+if settings.GOOGLE_APPLICATION_CREDENTIALS:
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = settings.GOOGLE_APPLICATION_CREDENTIALS

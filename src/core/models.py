@@ -30,7 +30,7 @@ Country (1) ──── (N) Law
 from sqlalchemy import (
     Column,
     String,
-    Text,Tables
+    Text,
     DateTime,
     BigInteger,
     func,
