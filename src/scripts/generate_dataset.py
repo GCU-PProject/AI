@@ -58,6 +58,7 @@ from ragas.llms import LangchainLLMWrapper
 from src.core.database import AsyncSessionLocal
 from src.core.models import Law
 from src.core.config import settings
+from ragas.run_config import RunConfig
 
 # =========================================================
 # 1. 설정값 (하이퍼파라미터)
@@ -72,7 +73,10 @@ OUTPUT_CSV_PATH = "data/ragas_testset.csv"
 # - TestsetGenerator 생성 시 전달하면, 내부의 모든 synthesizer에 자동 전파됨
 LLM_CONTEXT = (
     "You are evaluating an Australian legal AI assistant for Korean-speaking users. "
-    "Generate all questions and answers in Korean (한국어)."
+    "CRITICAL MANDATORY RULE: YOU MUST GENERATE ALL QUESTIONS AND ANSWERS EXCLUSIVELY IN THE KOREAN LANGUAGE (한국어). "
+    "Even if instructed to adopt an English-speaking persona or a specific English style (e.g. 'POOR_GRAMMAR'), YOU MUST TRANSLATE your final thought into highly natural Korean before outputting. NEVER use English for the generated questions or answers. "
+    'IMPORTANT: 1) ALWAYS output valid JSON. 2) Ensure internal quotes inside JSON strings are properly escaped (e.g. \\" instead of "). '
+    "3) Do not include markdown code block backticks around your JSON payload."
 )
 
 
@@ -117,9 +121,8 @@ async def generate_dataset():
     print("🧠 [2/5] Vertex AI 모델 및 RAGAS 컴포넌트를 초기화합니다...")
 
     # ── Vertex AI 모델 초기화 ──
-    # 추후 비평기용 모델은 더 상위 모델로 설정 예정
     llm = ChatVertexAI(
-        model_name=settings.GCP_MODEL_NAME,
+        model_name="gemini-2.5-pro",  # pro 모델로 고정
         project=settings.GCP_PROJECT_ID,
         location=settings.GCP_LOCATION,
         temperature=0.0,  # 법률 AI의 일관성과 정확성을 위해 0.0으로 고정
@@ -145,7 +148,6 @@ async def generate_dataset():
     generator = TestsetGenerator.from_langchain(
         llm=llm,
         embedding_model=embeddings,
-        llm_context=LLM_CONTEXT,
     )
 
     # ── query_distribution 설정 (질문 난이도 비율) ──
@@ -203,6 +205,10 @@ async def generate_dataset():
             testset_size=TESTSET_SIZE,  # 생성할 테스트 샘플 수 (구버전: test_size)
             query_distribution=query_distribution,  # 질문 유형별 비율 (구버전: distributions)
             with_debugging_logs=True,  # 디버깅 로그 활성화
+            run_config=RunConfig(
+                timeout=120, max_retries=10, max_workers=4
+            ),  # 재시도 10회 등 여유 부여
+            raise_exceptions=False,  # JSON 파싱 실패 같은 에러가 나도 하나만 건너뛰고 전체 코드가 뻗지 않도록 방지
         )
     except Exception as e:
         print(f"\n❌ 데이터셋 생성 중 오류 발생: {e}")
