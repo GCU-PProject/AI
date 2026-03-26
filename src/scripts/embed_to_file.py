@@ -39,7 +39,7 @@ async def step1_embed_to_file():
     # files = glob.glob("law_data_VEH.jsonl")
     # 원상복귀: 위 주석을 풀고 아래 리스트를 주석 처리하세요.
     files = [
-        "law_data_AU.jsonl",
+        "data/law_data_AU.jsonl",
     ]
 
     # 파일 존재 여부 확인 (리스트 사용 시 glob과 달리 직접 확인 필요)
