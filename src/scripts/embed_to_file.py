@@ -39,10 +39,7 @@ async def step1_embed_to_file():
     # files = glob.glob("law_data_VEH.jsonl")
     # 원상복귀: 위 주석을 풀고 아래 리스트를 주석 처리하세요.
     files = [
-        "law_data_GOV.jsonl",
-        "law_data_HSC.jsonl",
-        "law_data_EDC.jsonl",
-        "law_data_VEH.jsonl",
+        "data/law_data_AU.jsonl",
     ]
 
     # 파일 존재 여부 확인 (리스트 사용 시 glob과 달리 직접 확인 필요)
@@ -82,7 +79,7 @@ async def step1_embed_to_file():
                 row = json.loads(line)
 
                 # (A) 임베딩 텍스트 생성 (로직 유지)
-                text_for_embedding = f"{row.get('law_code', '')} {row.get('article_no', '')} {row.get('content', '')}"
+                text_for_embedding = f"{row.get('law_type', '')} {row.get('article_no', '')} {row.get('content', '')}"
                 batch_data.append(text_for_embedding)
 
                 # (B) 객체 보관 (DB 객체 생성 대신 딕셔너리 그대로 사용)
