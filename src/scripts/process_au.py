@@ -100,7 +100,7 @@ def export_to_jsonl():
     corpus = ds['corpus'].select(range(1000))
     print("🔄 텍스트 분류 및 law_data JSONL 형식 매핑 중...")
     
-    output_filename = "law_data_AU.jsonl"
+    output_filename = "data/law_data_AU.jsonl"
     processed_count = 0
     
     # 호주 관할권별 임의의 country_id 매핑 딕셔너리
