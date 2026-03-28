@@ -11,20 +11,24 @@
 
 [응답 예시]
 성공 시:
-    { "isSuccess": true,  "code": "AI200", "message": "성공입니다.", "result": {...} }
+    { "success": true, "status": 200, "code": "SUCCESS", "message": "성공입니다.", "timestamp": "...", "result": {...} }
 
 실패 시:
-    { "isSuccess": false, "code": "AI500", "message": "서버 내부 오류...", "result": null }
+    { "success": false, "status": 500, "code": "COMMON500", "message": "서버 내부 오류...", "timestamp": "...", "result": null }
 """
 
 from pydantic import BaseModel
+from pydantic import Field
 from typing import Optional, Any
+from datetime import datetime, timezone
 
 
 class CommonResponse(BaseModel):
-    isSuccess: bool  # 요청 성공 여부
-    code: str  # 응답 코드 (예: "AI200" 성공, "AI500" 서버 에러)
+    success: bool  # true/false
+    status: int  # HTTP 상태 코드와 동일한 의미의 숫자 코드
+    code: str  # 응답 코드 (예: "SUCCESS", "COMMON400")
     message: str  # 사용자에게 표시할 메시지
-    result: Optional[Any] = (
-        None  # 실제 데이터 (ChatResult, CompareResult 등이 들어감, 에러 시 null)
+    timestamp: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
+    result: Optional[Any] = None  # 실제 데이터 (에러 시 null)
