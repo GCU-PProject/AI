@@ -29,6 +29,7 @@ v1에서는 Google Vertex AI SDK를 직접 호출하여 임베딩, 검색, 프�
     → 6단계: API 응답 반환
 """
 import json
+import logging
 from typing import Dict, Any, List, Optional
 from langchain_google_vertexai import VertexAIEmbeddings, ChatVertexAI
 from langchain_core.prompts import ChatPromptTemplate
@@ -41,6 +42,9 @@ from src.core.models import Law
 from src.core.config import settings
 from src.v2_services.memory import contextualize_question, save_to_history
 
+
+logger = logging.getLogger(__name__)
+
 # =========================================================
 # 1. 설정값 (하이퍼파라미터)
 # =========================================================
@@ -52,7 +56,7 @@ from src.v2_services.memory import contextualize_question, save_to_history
 # - 너무 작으면(예: 2~3) 관련 법률을 놓칠 수 있고,
 #   너무 크면(예: 20) 관련 없는 문서가 섞여 답변 품질이 저하됩니다.
 # - 법률은 하나의 주제가 여러 조항에 걸쳐 규정되는 경우가 많아 5로 설정했습니다.
-TOP_K = 5
+TOP_K = 3
 
 # MAX_DISTANCE_THRESHOLD: L2 거리(유클리드 거리) 기반 유사도 임계값
 # - 벡터 간 거리가 이 값 이하인 문서만 "관련 있음"으로 판단합니다.
@@ -325,6 +329,25 @@ def format_docs(docs: List[Document]) -> str:
     return "\n".join(formatted)
 
 
+def _extract_text_from_ai_content(content: Any) -> str:
+    """AIMessage content를 안전하게 문자열로 변환합니다."""
+    if isinstance(content, str):
+        return content
+
+    if isinstance(content, list):
+        parts: List[str] = []
+        for item in content:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict):
+                text = item.get("text")
+                if isinstance(text, str):
+                    parts.append(text)
+        return "".join(parts)
+
+    return str(content) if content is not None else ""
+
+
 # =========================================================
 # 7. [메인] RAG 답변 생성 함수
 # =========================================================
@@ -391,15 +414,26 @@ async def generate_answer(
 
     # ----- Step 5: LCEL 체인 실행 (답변 생성) -----
     # LCEL(LangChain Expression Language) 파이프라인:
-    #   prompt | llm | StrOutputParser()
-    #   (프롬프트 생성) → (LLM 호출) → (응답에서 텍스트만 추출)
+    #   prompt | llm
+    #   (프롬프트 생성) → (LLM 호출)
     #
     # ※ 여기서는 번역본이 아닌 원본 질문(query)을 전달합니다.
     #   이유: 사용자가 한국어로 질문했으면 한국어로 답변해야 하므로,
     #         LLM에게는 원본 한국어 질문을 전달하여 답변 언어를 맞춥니다.
-    chain = CHAT_PROMPT | llm | StrOutputParser()
+    chain = CHAT_PROMPT | llm
 
-    final_answer = await chain.ainvoke({"context": context, "question": query})
+    ai_response = await chain.ainvoke({"context": context, "question": query})
+    finish_reason = None
+    if hasattr(ai_response, "response_metadata") and isinstance(
+        ai_response.response_metadata, dict
+    ):
+        finish_reason = ai_response.response_metadata.get("finish_reason")
+
+    # 디버깅용 로그: 응답 본문에는 노출하지 않습니다.
+    logger.info("[v2][qna] finish_reason=%s", finish_reason)
+    print(f"🧪 [v2][qna] finish_reason={finish_reason}")
+
+    final_answer = _extract_text_from_ai_content(ai_response.content)
 
     # ----- Step 6: 대화 기록 저장 -----
     # session_id가 있으면 이번 질문/답변을 대화 기록에 추가
@@ -476,8 +510,9 @@ async def generate_answer_stream(
 
     except Exception as e:
         import traceback
+
         traceback.print_exc()
         # 오류 메시지 중에 줄바꿈이 있으면 SSE 포맷이 깨질 수 있으므로 제거/치환
-        error_msg = str(e).replace('\\n', ' ')
+        error_msg = str(e).replace("\\n", " ")
         yield f"data: [ERROR] 스트리밍 중 오류가 발생했습니다: {error_msg}\n\n"
         yield f"data: [DONE]\n\n"
