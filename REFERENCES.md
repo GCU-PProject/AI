@@ -14,4 +14,4 @@
 
 ## 기술 블로그 / 문서
 
-- (추후 추가 예정)
+- [테디노트의 LangChain 한국어 튜토리얼](https://wikidocs.net/book/14314) - RAG 파이프라인 구축, RAGAS 평가 참고

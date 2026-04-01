@@ -14,8 +14,8 @@ uvicorn src.main:app --reload
 /                  → 헬스 체크 (서버 상태 확인)
 /api/v1/chat       → v1 법률 Q&A (Vertex AI SDK 직접 호출)
 /api/v1/compare    → v1 법률 비교
-/api/v2/chat       → v2 법률 Q&A (LangChain 기반)
-/api/v2/compare    → v2 법률 비교
+/api/qna           → v2 법률 Q&A (LangChain 기반)
+/api/compare       → v2 법률 비교
 
 [load_dotenv()가 import보다 먼저 오는 이유]
 .env 파일의 환경변수(GCP 인증 정보 등)를 OS에 먼저 등록해야
@@ -49,8 +49,8 @@ app = FastAPI(title="GLAW AI Backend", version="0.2.0")
 # v1 라우터: /api/v1/chat, /api/v1/compare
 app.include_router(chat.router, prefix="/api/v1", tags=["Chat V1 (Direct)"])
 
-# v2 라우터: /api/v2/chat, /api/v2/compare
-app.include_router(chat_v2.router, prefix="/api/v2", tags=["Chat V2 (LangChain)"])
+# v2 라우터: /api/qna, /api/compare
+app.include_router(chat_v2.router, prefix="/api", tags=["Chat V2 (LangChain)"])
 
 
 # =========================================================

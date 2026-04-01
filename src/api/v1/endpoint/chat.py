@@ -21,7 +21,7 @@ POST /api/v1/compare    → 법률 비교 (v1_services/compare_service 호출)
 
 [에러 처리 전략]
 모든 엔드포인트에서 try-except로 서비스 호출을 감싸고,
-에러 발생 시 CommonResponse(isSuccess=False, code="AI500")을 반환합니다.
+에러 발생 시 CommonResponse(success=False, status=500, code="COMMON500")을 반환합니다.
 → 서버가 500 에러로 죽지 않고, 프론트엔드에 구조화된 에러 메시지를 전달합니다.
 """
 
@@ -54,7 +54,8 @@ logger = logging.getLogger(__name__)
 @router.post("/chat_test", response_model=CommonResponse)
 def chat_endpoint_test(request: ChatRequest):
     return CommonResponse(
-        isSuccess=True,
+        success=True,
+        status=200,
         code="COMMON200",
         message="API 구조 리팩토링 완료!",
         result={"echo": request.query},
@@ -93,7 +94,11 @@ async def chat_endpoint(request: ChatRequest, db: AsyncSession = Depends(get_db)
         # CommonResponse로 래핑하여 반환
         # 모든 API가 동일한 형식(isSuccess, code, message, result)으로 응답합니다.
         return CommonResponse(
-            isSuccess=True, code="AI200", message="성공입니다.", result=chat_result
+            success=True,
+            status=200,
+            code="SUCCESS",
+            message="성공입니다.",
+            result=chat_result,
         )
 
     except Exception as e:
@@ -101,8 +106,9 @@ async def chat_endpoint(request: ChatRequest, db: AsyncSession = Depends(get_db)
         # logger.exception(): 에러 메시지 + 전체 스택 트레이스를 로그에 기록
         logger.exception("Chat endpoint error")
         return CommonResponse(
-            isSuccess=False,
-            code="AI500",
+            success=False,
+            status=500,
+            code="COMMON500",
             message="서버 내부 오류가 발생했습니다.",
             result=None,
         )
@@ -133,16 +139,18 @@ async def compare_endpoint(request: CompareRequest, db: AsyncSession = Depends(g
         compare_result = CompareResult(**result_data)
 
         return CommonResponse(
-            isSuccess=True,
-            code="AI200",
+            success=True,
+            status=200,
+            code="SUCCESS",
             message="비교 분석 성공입니다.",
             result=compare_result,
         )
 
     except Exception as e:
         return CommonResponse(
-            isSuccess=False,
-            code="AI500",
+            success=False,
+            status=500,
+            code="COMMON500",
             message=f"비교 분석 중 오류 발생: {str(e)}",
             result=None,
         )

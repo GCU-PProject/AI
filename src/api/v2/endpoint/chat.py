@@ -15,8 +15,8 @@ v1과 v2는 동일한 schemas/ 폴더의 모델을 공유합니다.
 → 프론트엔드는 URL만 v1→v2로 바꾸면 나머지는 그대로 사용 가능
 
 [엔드포인트 목록]
-POST /api/v2/chat       → 법률 Q&A (v2_services/chat_service 호출)
-POST /api/v2/compare    → 법률 비교 (v2_services/compare_service 호출)
+POST /api/qna           → 법률 Q&A (v2_services/chat_service 호출)
+POST /api/compare       → 법률 비교 (v2_services/compare_service 호출)
 """
 
 import logging
@@ -37,7 +37,7 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-@router.post("/chat", response_model=CommonResponse)
+@router.post("/qna", response_model=CommonResponse)
 async def chat_endpoint(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     """
     [v2 LangChain] 법률 Q&A 챗봇 API
@@ -51,8 +51,9 @@ async def chat_endpoint(request: ChatRequest, db: AsyncSession = Depends(get_db)
 
     if not country.scalar():
         return CommonResponse(
-            isSuccess=False,
-            code="AI404",
+            success=False,
+            status=404,
+            code="AI_COUNTRY_NOT_FOUND",
             message=f"존재하지 않는 국가 ID입니다: {request.country_id}",
             result=None,
         )
@@ -68,21 +69,27 @@ async def chat_endpoint(request: ChatRequest, db: AsyncSession = Depends(get_db)
         chat_result = ChatResult(**result_data)
 
         return CommonResponse(
-            isSuccess=True, code="AI200", message="성공입니다.", result=chat_result
+            success=True,
+            status=200,
+            code="SUCCESS",
+            message="성공입니다.",
+            result=chat_result,
         )
 
     except ConnectionError:
         return CommonResponse(
-            isSuccess=False,
-            code="AI503",
+            success=False,
+            status=503,
+            code="AI_DB_CONNECTION_FAILED",
             message="데이터베이스 연결에 실패했습니다.",
             result=None,
         )
 
     except ValueError as e:
         return CommonResponse(
-            isSuccess=False,
-            code="AI400",
+            success=False,
+            status=400,
+            code="AI_RETRIEVAL_FAILED",
             message=f"요청 처리 중 오류 : {str(e)}",
             result=None,
         )
@@ -90,14 +97,15 @@ async def chat_endpoint(request: ChatRequest, db: AsyncSession = Depends(get_db)
     except Exception as e:
         logger.exception("[v2] Chat endpoint error")
         return CommonResponse(
-            isSuccess=False,
-            code="AI500",
+            success=False,
+            status=500,
+            code="COMMON500",
             message="서버 내부 오류가 발생했습니다.",
             result=None,
         )
 
 
-@router.post("/chat/stream")
+@router.post("/qna/stream")
 async def chat_stream_endpoint(
     request: ChatRequest, db: AsyncSession = Depends(get_db)
 ):
@@ -109,8 +117,9 @@ async def chat_stream_endpoint(
     )
     if not country.scalar():
         return CommonResponse(
-            isSuccess=False,
-            code="AI404",
+            success=False,
+            status=404,
+            code="AI_COUNTRY_NOT_FOUND",
             message=f"존재하지 않는 국가 ID입니다: {request.country_id}",
             result=None,
         )
@@ -151,8 +160,9 @@ async def compare_endpoint(request: CompareRequest, db: AsyncSession = Depends(g
             missing.append(request.country_id_2)
 
         return CommonResponse(
-            isSuccess=False,
-            code="AI404",
+            success=False,
+            status=404,
+            code="AI_COMPARE_COUNTRY_NOT_FOUND",
             message=f"존재하지 않는 국가 ID입니다: {missing}",
             result=None,
         )
@@ -168,24 +178,27 @@ async def compare_endpoint(request: CompareRequest, db: AsyncSession = Depends(g
         compare_result = CompareResult(**result_data)
 
         return CommonResponse(
-            isSuccess=True,
-            code="AI200",
+            success=True,
+            status=200,
+            code="SUCCESS",
             message="[v2] 비교 분석 성공입니다.",
             result=compare_result,
         )
 
     except ConnectionError:
         return CommonResponse(
-            isSuccess=False,
-            code="AI503",
+            success=False,
+            status=503,
+            code="AI_DB_CONNECTION_FAILED",
             message="데이터베이스 연결에 실패했습니다.",
             result=None,
         )
 
     except ValueError as e:
         return CommonResponse(
-            isSuccess=False,
-            code="AI400",
+            success=False,
+            status=400,
+            code="AI_RETRIEVAL_FAILED",
             message=f"요청 처리 중 오류 : {str(e)}",
             result=None,
         )
@@ -193,8 +206,9 @@ async def compare_endpoint(request: CompareRequest, db: AsyncSession = Depends(g
     except Exception as e:
         logger.exception("[v2] Compare endpoint error")
         return CommonResponse(
-            isSuccess=False,
-            code="AI500",
+            success=False,
+            status=500,
+            code="AI_COMPARE_ANALYSIS_FAILED",
             message=f"비교 분석 중 오류 발생: {str(e)}",
             result=None,
         )

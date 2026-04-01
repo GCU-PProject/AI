@@ -11,7 +11,7 @@ Python의 데이터 검증 라이브러리입니다.
 - FastAPI와 연동되어 Swagger 문서(/docs)에 자동으로 요청/응답 형식이 표시됩니다.
 
 [사용되는 곳]
-- ChatRequest: POST /api/v1/chat, POST /api/v2/chat의 요청 본문(body)
+- ChatRequest: POST /api/v1/chat, POST /api/qna의 요청 본문(body)
 - ChatResult: CommonResponse의 result 필드에 들어가는 응답 데이터
 """
 
