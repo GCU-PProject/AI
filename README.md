@@ -37,7 +37,8 @@ GLAW/AI/
 │   ├── api/              # API 엔드포인트
 │   ├── core/             # 핵심 설정 (config, DB, models)
 │   ├── schemas/          # 요청/응답 스키마
-│   ├── services/         # 비즈니스 로직 (RAG, 비교)
+│   ├── v1_services/      # v1 비즈니스 로직
+│   ├── v2_services/      # v2 비즈니스 로직
 │   ├── scripts/          # 유틸리티 스크립트
 │   │   ├── crawl_us_ca.py      # 미국(캘리포니아) 법률 크롤러
 │   │   ├── process_us_ca.py    # 크롤링 데이터 가공
@@ -67,9 +68,17 @@ pip install -r requirements.txt
 ### 2. 환경변수 설정
 `.env.example`을 참고하여 `.env` 파일을 생성합니다.
 ```bash
+# Windows
+copy .env.example .env
+
+# Linux/macOS
 cp .env.example .env
-# .env 파일을 열어 DB 접속 정보, GCP 설정 등을 입력
 ```
+
+필수로 확인할 값:
+- `GOOGLE_APPLICATION_CREDENTIALS`
+- `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`
+- `CORS_ALLOW_ORIGINS` (프론트가 API를 직접 호출하는 경우)
 
 ### 3. SSH 터널링 (로컬 개발 시)
 DB 서버에 직접 접근할 수 없으므로 SSH 터널링이 필요합니다.

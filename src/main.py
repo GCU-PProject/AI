@@ -29,15 +29,29 @@ from dotenv import load_dotenv
 # ※ 반드시 다른 모듈을 import하기 전에 호출해야 합니다!
 load_dotenv()
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from datetime import datetime, timezone
 from src.core.config import settings
 from src.api.v1.endpoint import chat  # v1 라우터 (Vertex AI 직접 호출)
 from src.api.v2.endpoint import chat as chat_v2  # v2 라우터 (LangChain 기반)
+from src.api.v2.endpoint import compare as compare_v2  # v2 비교 API 라우터
+from src.api.v2.endpoint import risk as risk_v2  # v2 리스크 API 라우터
 
 # FastAPI 앱 생성
 # - title: Swagger 문서(/docs)에 표시되는 API 이름
 # - version: API 버전 (운영 배포 시 관리용)
 app = FastAPI(title="GLAW AI Backend", version="0.2.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # =========================================================
 # 라우터 등록
@@ -47,10 +61,47 @@ app = FastAPI(title="GLAW AI Backend", version="0.2.0")
 # - tags: Swagger 문서에서 그룹핑할 이름
 
 # v1 라우터: /api/v1/chat, /api/v1/compare
-app.include_router(chat.router, prefix="/api/v1", tags=["Chat V1 (Direct)"])
+app.include_router(
+    chat.router, prefix="/api/v1", tags=["Chat V1 API (초기 직접구현 API로 미사용)"]
+)
 
-# v2 라우터: /api/qna, /api/compare
-app.include_router(chat_v2.router, prefix="/api", tags=["Chat V2 (LangChain)"])
+# v2 라우터: /api/qna, /api/compare, /api/risk
+app.include_router(chat_v2.router, prefix="/api", tags=["Chat API"])
+app.include_router(compare_v2.router, prefix="/api", tags=["Compare API"])
+app.include_router(risk_v2.router, prefix="/api", tags=["Risk API"])
+
+
+# =========================================================
+# 글로벌 예외 처리 (API 명세서 규격 준수)
+# =========================================================
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """
+    FastAPI의 기본 422 Unprocessable Entity 에러를 가로채서,
+    팀의 공동 API 명세서에 맞게 400 COMMON400 에러로 변환하여 응답합니다.
+    """
+    
+    missing_fields = []
+    for error in exc.errors():
+        loc = error.get("loc", [])
+        if len(loc) > 1:
+            missing_fields.append(str(loc[-1]))
+        else:
+            missing_fields.append(str(loc[0]))
+            
+    fields_str = ", ".join(missing_fields)
+    message = f"요청 처리 중 오류 : 필수 입력값({fields_str})을 확인해주세요."
+    
+    content = {
+        "success": False,
+        "status": 400,
+        "code": "COMMON400",
+        "message": message,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "result": None
+    }
+    
+    return JSONResponse(status_code=400, content=content)
 
 
 # =========================================================
