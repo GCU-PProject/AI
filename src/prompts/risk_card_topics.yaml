@@ -1,0 +1,136 @@
+_type: "prompt"
+input_variables:
+  - country_name
+  - travel_purpose
+  - visa_type
+  - age_band
+template: |
+  당신은 해외 여행 리스크 분석 전문가입니다.
+  아래 조건의 **한국인 여행자/체류자**가 해당 국가에서 **모르고 실수할 수 있는** 법적 리스크 주제를 6개 생성하세요.
+
+  --- 여행자 조건 ---
+  - 국가: {country_name}
+  - 체류 목적: {travel_purpose}
+  - 비자 유형: {visa_type}
+  - 연령대: {age_band}
+
+  [핵심 관점 — 가장 중요]
+  이 리스크 카드의 대상은 "한국에서 온 여행자/유학생/근로자"입니다.
+  "이런 행위를 하지 마세요" 식의 범죄 경고가 아니라,
+  "이런 상황에서 모르고 이렇게 할 수 있으니 주의하세요" 식의 **실수 방지** 관점으로 작성하세요.
+
+  다음 관점에서 주제를 선정하세요:
+  1. **한국에서는 합법/일반적이지만, 해당 국가에서는 불법이거나 엄격히 규제되는 것**
+     예: 한국에서는 편의점 앞에서 음주 가능 → 미국에서는 공공장소 음주 불법
+  2. **해당 국가에서 합법이지만, 한국 국적자에게는 여전히 한국법이 적용되는 것**
+     예: 캘리포니아에서 대마초 합법이지만, 한국인은 해외에서도 한국 마약류관리법 적용
+  3. **한국과 기준이 달라서 모르고 위반할 수 있는 것**
+     예: 음주 연령(한국 만19세 vs 미국 만21세), 나이 계산법 차이, 교통 규칙 차이
+  4. **현지에서 흔히 접하는 상황이지만 한국인이 인지하지 못하는 위험**
+     예: 에디블(대마초 식품)이 일반 과자와 같은 매대에 진열됨
+
+  [주제 선정 기준]
+  1. 해당 국가에서 **특히 엄중하게 처벌**되거나, 한국과 **현저히 다른** 규제를 우선 선정
+  2. **비자(=법적 한계)와 체류 목적(=행동 욕구)**이 상충할 경우, 무조건 '법적 한계(비자)'를 최우선 판단 기준으로 삼되, 이를 인지하지 못해 발생하는 신분/이민법 위반 리스크를 적극 고려
+  3. 해당 연령대에 흔히 발생하며, **한국인이 실수로 저지르기 쉬운 행동**을 중심으로 선정
+
+  [위험도 기준]
+  - HIGH: 형사 처벌(징역, 강제추방), 고액 벌금, 입국 금지
+  - MEDIUM: 행정 처분, 중간 수준 벌금, 비자 취소 가능성
+  - LOW: 경고, 소액 과태료, 주의 필요 수준
+
+  [출력 형식]
+  반드시 JSON 배열로만 응답하세요. 다른 텍스트는 포함하지 마세요.
+  - risk_title은 괄호 없이, 상황을 직관적으로 설명하는 한 문장으로 작성하세요.
+
+  === 퓨샷 예시 1 ===
+  조건: 싱가포르 / tourism / short_stay / 20s
+
+  [
+    {{
+      "risk_title": "아이코스나 쥴 같은 전자담배를 습관적으로 가방에 넣어 반입하면 압수 및 벌금이 부과됨",
+      "risk_level": "HIGH",
+      "search_query": "electronic cigarette vaporizer import ban prohibition penalty Singapore"
+    }},
+    {{
+      "risk_title": "편의점에서 산 껌을 무심코 짐에 넣어 반입하면 불법 물품 반입으로 간주됨",
+      "risk_level": "MEDIUM",
+      "search_query": "chewing gum import sale ban fine Singapore"
+    }},
+    {{
+      "risk_title": "밤 10시 이후 길거리나 편의점 앞에서 야외 음주를 하면 단속됨",
+      "risk_level": "MEDIUM",
+      "search_query": "public drinking alcohol curfew 10pm liquor control Singapore"
+    }},
+    {{
+      "risk_title": "지하철이나 버스 안에서 생수나 음료수를 마시면 벌금이 부과됨",
+      "risk_level": "LOW",
+      "search_query": "eating drinking MRT public transport fine penalty Singapore"
+    }},
+    {{
+      "risk_title": "대부분의 건물이 실내 전면 금연이므로 호텔 방에서 무심코 흡연 시 고액 벌금이 부과됨",
+      "risk_level": "MEDIUM",
+      "search_query": "indoor smoking ban hotel fine penalty Singapore"
+    }},
+    {{
+      "risk_title": "한국과 달리 무단횡단을 경찰이 적극적으로 단속하여 현장에서 즉시 벌금이 부과됨",
+      "risk_level": "LOW",
+      "search_query": "jaywalking pedestrian crossing fine penalty Singapore"
+    }}
+  ]
+
+  === 퓨샷 예시 2 ===
+  조건: United States (California) / tourism / short_stay / 20s
+
+  [
+    {{
+      "risk_title": "일반 과자처럼 진열된 대마초 식품을 몰약 간식으로 알고 구매하여 섭취하면 한국 마약법으로 처벌될 수 있음",
+      "risk_level": "HIGH",
+      "search_query": "cannabis edible food product sale regulation California marijuana Korean law abroad"
+    }},
+    {{
+      "risk_title": "한국 나이로는 성인이더라도 미국 나이 기준 만 21세 미만일 때 주류를 구매하면 불법임",
+      "risk_level": "HIGH",
+      "search_query": "underage drinking age 21 alcohol purchase possession penalty California"
+    }},
+    {{
+      "risk_title": "해변이나 공원에서 캔맥주를 마시거나 뚜껑이 열린 술병을 들고 다니면 체포될 수 있음",
+      "risk_level": "MEDIUM",
+      "search_query": "open container law public drinking alcohol ban fine California"
+    }},
+    {{
+      "risk_title": "한국에서 처방받은 약을 영문 처방전 없이 반입하면 규제 약물 밀반입으로 오인될 수 있음",
+      "risk_level": "HIGH",
+      "search_query": "prescription drug import controlled substance customs FDA regulation USA"
+    }},
+    {{
+      "risk_title": "운전 중 붉은색 정지 표지판에서 차량을 완전히 멈추지 않고 지나치면 현장에서 바로 벌금이 부과됨",
+      "risk_level": "MEDIUM",
+      "search_query": "stop sign complete stop traffic violation fine penalty California"
+    }},
+    {{
+      "risk_title": "운전 중 노란색 스쿨버스가 빨간불을 켜고 정차하면 반대편 차선의 차량도 반드시 멈춰야 함",
+      "risk_level": "HIGH",
+      "search_query": "school bus stop sign red light passing violation penalty California"
+    }}
+  ]
+
+  === 나쁜 예시 (절대 이렇게 생성하지 마세요) ===
+  - {{"risk_title": "공공장소 음주 금지 (Open Container Law)"}} → ❌ 괄호로 법률명을 적지 마세요. 직관적인 문장형으로 작성하세요.
+  - {{"risk_title": "위조 신분증을 사용하지 마세요"}} → ❌ 고의적 범죄. 모르고 하는 실수가 아님
+  - {{"risk_title": "절도를 하지 마세요"}} → ❌ 당연한 범죄 경고
+  - {{"risk_title": "불법 약물을 소지하지 마세요"}} → ❌ 너무 일반적. 구체적 상황으로 바꿔야 함
+  - {{"risk_title": "여권을 잘 보관하세요"}} → ❌ 모든 나라 공통 주의사항
+  - {{"risk_title": "현지 문화를 존중하세요"}} → ❌ 법적 리스크가 아님
+  - {{"risk_title": "무면허 운전 금지"}} → ❌ 모든 나라에서 불법. 한국인이 모르고 할 실수가 아님
+  - {{"risk_title": "이민 서류 위조 금지"}} → ❌ 고의적 범죄
+  - {{"risk_title": "성관계 동의 연령 위반"}} → ❌ 이용자에게 불쾌감을 줄 수 있는 민감한 주제
+  - {{"risk_title": "성범죄 관련 법규"}} → ❌ 이용자에게 무례하고 불쾌할 수 있는 주제
+  - {{"risk_title": "성매매 및 성매매 알선"}} → ❌ 이용자를 잠재적 범죄자로 가정하는 주제
+
+  search_query 작성 규칙:
+  - 반드시 영어로 작성하세요.
+  - 해당 국가의 법률 조항을 검색할 수 있는 구체적인 키워드를 사용하세요. (예: 뭉뚱그려 'electric vehicle'이라 하지 말고, 'motorized scooter', 'electric board'처럼 명확한 대상 명칭 사용)
+  - 국가명을 반드시 포함하세요.
+
+  이제 위 퓨샷 예시와 동일한 형식으로, 주어진 조건({country_name} / {travel_purpose} / {visa_type} / {age_band})에 맞는 법적 리스크 주제 6개를 JSON 배열로 생성하세요.
