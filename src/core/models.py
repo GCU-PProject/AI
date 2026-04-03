@@ -31,55 +31,16 @@ from sqlalchemy import (
     Column,
     String,
     Text,
+    JSON,
     DateTime,
     BigInteger,
     func,
     ForeignKey,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
 from pgvector.sqlalchemy import Vector
 from src.core.database import Base
-
-
-# =============================================
-# 테스트용 모델 (이전 버전 - 현재 사용하지 않음)
-# =============================================
-# 프로젝트 초기에 사용했던 테이블입니다.
-# 현재는 아래의 Country/Law 모델을 사용합니다.
-# DB에 test_countries / test_laws 테이블이 남아있어
-# ORM 충돌을 방지하기 위해 모델 정의를 유지하고 있습니다.
-
-
-class TestCountry(Base):
-    """[이전 버전] 테스트용 국가 테이블 - 현재 사용하지 않음"""
-
-    __tablename__ = "test_countries"
-
-    country_id = Column(BigInteger, primary_key=True, autoincrement=True)
-    country_code = Column(String(10), unique=True, nullable=False)
-    country_name = Column(String(100), nullable=False)
-    created_at = Column(DateTime, server_default=func.now())
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
-
-
-class TestLaw(Base):
-    """[이전 버전] 테스트용 법률 테이블 - 현재 사용하지 않음"""
-
-    __tablename__ = "test_laws"
-
-    law_id = Column(BigInteger, primary_key=True, autoincrement=True)
-    country_id = Column(
-        BigInteger, ForeignKey("test_countries.country_id"), nullable=False
-    )
-    law_title = Column(String)
-    category = Column(String)
-    article_no = Column(String)
-    content = Column(Text)
-    enactment_date = Column(DateTime)
-    amendment_date = Column(DateTime)
-    created_at = Column(DateTime, server_default=func.now())
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
-    embedding = Column(Vector(768))
 
 
 # =============================================
@@ -132,6 +93,9 @@ class Country(Base):
     # - back_populates="country": Law 모델의 country 속성과 양방향 연결
     # - 사용 예: country.laws → 이 국가의 모든 법률 리스트
     laws = relationship("Law", back_populates="country")
+
+    # 관계 설정 (1:N) - 하나의 국가/지역은 여러 리스크 조합을 가짐
+    risks = relationship("Risk", back_populates="country")
 
 
 class Law(Base):
@@ -196,3 +160,64 @@ class Law(Base):
     # - back_populates="laws": Country 모델의 laws 속성과 양방향 연결
     # - 사용 예: law.country → 이 법률이 속한 국가 객체
     country = relationship("Country", back_populates="laws")
+
+
+class Risk(Base):
+    """리스크 조합 단위 저장 테이블"""
+
+    __tablename__ = "risk"
+    # 동일 국가/조건 조합은 1건만 유지
+    __table_args__ = (
+        UniqueConstraint(
+            "country_id",
+            "travel_purpose",
+            "visa_type",
+            "age_band",
+            name="uq_risk_country_purpose_visa_age",
+        ),
+    )
+
+    risk_id = Column(BigInteger, primary_key=True, autoincrement=True)
+    # 조회 조건으로 사용하는 사용자 상황 필드
+    country_id = Column(BigInteger, ForeignKey("countries.country_id"), nullable=False)
+    travel_purpose = Column(String(50), nullable=False)
+    visa_type = Column(String(50), nullable=False)
+    age_band = Column(String(20), nullable=False)
+    # 카드 전체를 대표하는 상위 위험도
+    overall_risk_level = Column(String(20), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    # 국가-리스크 조합 / 조합-카드(1:N) 관계
+    country = relationship("Country", back_populates="risks")
+    risk_items = relationship("RiskList", back_populates="risk")
+
+
+class RiskList(Base):
+    """리스크 카드 단위 저장 테이블"""
+
+    __tablename__ = "risk_list"
+    # 같은 리스크 조합 내에서 정렬 순서 중복 방지
+    __table_args__ = (
+        UniqueConstraint("risk_id", "sort_order", name="uq_risk_list_risk_id_order"),
+    )
+
+    risk_list_id = Column(BigInteger, primary_key=True, autoincrement=True)
+    risk_id = Column(BigInteger, ForeignKey("risk.risk_id"), nullable=False)
+    # 화면 노출 순서를 고정하기 위한 정렬 값
+    sort_order = Column(BigInteger, nullable=False)
+    risk_title = Column(String(255), nullable=False)
+    risk_level = Column(String(20), nullable=False)
+    risk_content = Column(Text, nullable=False)
+    # 배열 구조를 그대로 저장하기 위해 JSON 사용
+    risk_actions = Column(JSON, nullable=False, default=list)
+    law_refs = Column(JSON, nullable=False, default=list)
+    issue_refs = Column(JSON, nullable=False, default=list)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    risk = relationship("Risk", back_populates="risk_items")
