@@ -32,6 +32,7 @@ load_dotenv()
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, timezone
 from src.core.config import settings
 from src.api.v1.endpoint import chat  # v1 라우터 (Vertex AI 직접 호출)
@@ -43,6 +44,14 @@ from src.api.v2.endpoint import risk as risk_v2  # v2 리스크 API 라우터
 # - title: Swagger 문서(/docs)에 표시되는 API 이름
 # - version: API 버전 (운영 배포 시 관리용)
 app = FastAPI(title="GLAW AI Backend", version="0.2.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # =========================================================
 # 라우터 등록

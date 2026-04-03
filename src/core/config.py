@@ -47,6 +47,12 @@ class Settings(BaseSettings):
     GOOGLE_APPLICATION_CREDENTIALS: str  # 서비스 계정 키 파일 경로 (예: keys/xxx.json)
 
     # =============================================
+    # CORS 설정
+    # =============================================
+    # 예: CORS_ALLOW_ORIGINS=https://app.example.com,https://www.example.com
+    CORS_ALLOW_ORIGINS: str = ""
+
+    # =============================================
     # DB 접속 URL 생성 (property)
     # =============================================
     # @property: 메서드를 속성처럼 사용할 수 있게 해줍니다.
@@ -95,6 +101,26 @@ class Settings(BaseSettings):
             "dbname": self.DB_NAME,
             "sslmode": "require",
         }
+
+    @property
+    def CORS_ORIGINS(self) -> list[str]:
+        """
+        CORS 허용 Origin 목록을 반환합니다.
+
+        - 환경변수 CORS_ALLOW_ORIGINS를 쉼표(,)로 구분해 입력합니다.
+        - 빈 값이면 로컬 개발용 기본 Origin을 반환합니다.
+        """
+        if not self.CORS_ALLOW_ORIGINS or not self.CORS_ALLOW_ORIGINS.strip():
+            return [
+                "http://localhost:3000",
+                "http://127.0.0.1:3000",
+            ]
+
+        return [
+            origin.strip()
+            for origin in self.CORS_ALLOW_ORIGINS.split(",")
+            if origin.strip()
+        ]
 
     # .env 파일 설정
     class Config:
