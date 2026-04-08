@@ -10,6 +10,7 @@ Google Vertex AI(Gemini)를 활용하여 답변을 생성하는 서비스입니�
 ### 주요 기능
 - **법률 Q&A** (`/api/qna`): 특정 국가의 법률에 대해 질문하면 관련 조항을 검색하여 AI 답변 생성
 - **법률 비교** (`/api/compare`): 두 국가 간 법률을 비교하여 공통점과 차이점 분석
+- **리스크 카드** (`/api/risk`): 여행자 조건(국가, 목적, 비자, 연령)에 맞는 법적 리스크 카드 조회
 
 ### 🗂 국가 ID 매핑 (API 요청 시 참고)
 
@@ -25,7 +26,7 @@ Google Vertex AI(Gemini)를 활용하여 답변을 생성하는 서비스입니�
 | **Backend** | FastAPI, Uvicorn |
 | **Database** | PostgreSQL + pgvector (벡터 검색) |
 | **ORM** | SQLAlchemy (Async) |
-| **AI/ML** | Google Vertex AI (Gemini, text-embedding-005) |
+| **AI/ML** | Google Vertex AI (Gemini, text-embedding-005), LangChain |
 | **크롤링** | Requests, BeautifulSoup4 |
 | **Lint/Formatter** | Ruff, Black |
 
@@ -34,25 +35,52 @@ Google Vertex AI(Gemini)를 활용하여 답변을 생성하는 서비스입니�
 ```
 GLAW/AI/
 ├── src/
-│   ├── api/              # API 엔드포인트
-│   ├── core/             # 핵심 설정 (config, DB, models)
-│   ├── schemas/          # 요청/응답 스키마
-│   ├── v1_services/      # v1 비즈니스 로직
-│   ├── v2_services/      # v2 비즈니스 로직
-│   ├── scripts/          # 유틸리티 스크립트
-│   │   ├── crawl_us_ca.py      # 미국(캘리포니아) 법률 크롤러
-│   │   ├── process_us_ca.py    # 크롤링 데이터 가공
-│   │   ├── embed_to_file.py    # 임베딩 생성
-│   │   ├── load_to_db.py       # DB 적재
-│   │   ├── check_distance.py   # 벡터 거리 테스트
-│   │   ├── insert_dummy.py     # 더미 데이터 삽입
-│   │   ├── init_db.py          # DB 초기화
-│   │   └── db_check.py         # DB 연결 확인
-│   └── main.py           # FastAPI 앱 진입점
-├── data/                 # 크롤링/임베딩 데이터 (.jsonl)
-├── keys/                 # GCP 인증키 (Git 미포함)
-├── .env                  # 환경변수 (Git 미포함)
-├── requirements.txt      # Python 패키지 목록
+│   ├── api/                  # API 엔드포인트
+│   │   └── endpoint/
+│   │       ├── chat.py            # 법률 Q&A (/api/qna)
+│   │       ├── compare.py         # 법률 비교 (/api/compare)
+│   │       └── risk.py            # 리스크 카드 (/api/risk)
+│   ├── core/                 # 핵심 설정
+│   │   ├── config.py              # 환경변수 관리
+│   │   ├── database.py            # DB 연결 설정
+│   │   └── models.py              # ORM 모델 (Country, Law, Risk, RiskList)
+│   ├── schemas/              # 요청/응답 스키마
+│   │   ├── common.py              # 공통 응답 포맷 (CommonResponse)
+│   │   ├── chat.py                # Q&A 요청/응답
+│   │   ├── compare.py             # 비교 요청/응답
+│   │   └── risk.py                # 리스크 요청/응답
+│   ├── services/             # 비즈니스 로직 (LangChain 기반)
+│   │   ├── chat_service.py        # RAG Q&A 파이프라인
+│   │   ├── compare_service.py     # 법률 비교 분석
+│   │   ├── risk_service.py        # 리스크 카드 조회
+│   │   └── memory.py              # 대화 기록 관리 (세션)
+│   ├── prompts/              # LLM 프롬프트 (YAML)
+│   │   ├── chat.yaml              # Q&A 답변 생성 프롬프트
+│   │   ├── compare.yaml           # 비교 분석 프롬프트
+│   │   ├── translation.yaml       # 질문 번역 프롬프트
+│   │   ├── contextualize.yaml     # 질문 재구성 프롬프트
+│   │   ├── risk_card_topics.yaml  # 리스크 주제 생성 프롬프트 (스크립트용)
+│   │   └── risk_card_content.yaml # 리스크 본문 생성 프롬프트 (스크립트용)
+│   ├── scripts/              # 유틸리티 스크립트
+│   │   ├── crawl_us_ca.py         # 미국(캘리포니아) 법률 크롤러
+│   │   ├── process_us_ca.py       # 크롤링 데이터 가공
+│   │   ├── process_au.py          # 호주 데이터 가공
+│   │   ├── embed_to_file.py       # 임베딩 벡터 생성
+│   │   ├── load_to_db.py          # DB 적재
+│   │   ├── generate_risk_cards.py # 리스크 카드 생성 (LLM 호출)
+│   │   ├── load_risk_cards.py     # 리스크 카드 DB 적재
+│   │   ├── create_risk_tables.py  # 리스크 테이블 생성
+│   │   ├── check_distance.py      # 벡터 거리 테스트
+│   │   ├── check_models.py        # GCP 모델 연결 테스트
+│   │   ├── insert_countries.py    # 국가 초기 데이터 삽입
+│   │   ├── db_check.py            # DB 연결 확인
+│   │   ├── evaluate_rag.py        # RAG 성능 평가
+│   │   └── generate_dataset.py    # RAGAS 평가 데이터셋 생성
+│   └── main.py               # FastAPI 앱 진입점
+├── data/                     # 크롤링/임베딩 데이터 (.jsonl)
+├── keys/                     # GCP 인증키 (Git 미포함)
+├── .env                      # 환경변수 (Git 미포함)
+├── requirements.txt          # Python 패키지 목록
 └── README.md
 ```
 
