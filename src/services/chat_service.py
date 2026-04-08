@@ -21,6 +21,7 @@ import logging
 from typing import Dict, Any, List, Optional
 from langchain_google_vertexai import VertexAIEmbeddings, ChatVertexAI
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser
 from langchain_core.documents import Document
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -429,4 +430,3 @@ async def generate_answer(
         "related_law_id_list": law_ids,
         "search_success": True,
     }
-

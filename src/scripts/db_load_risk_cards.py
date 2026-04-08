@@ -2,7 +2,7 @@
 """
 리스크 카드 DB 적재 스크립트
 
-risk_generate_cards.py로 생성된 data/risk_cards.json을 읽어서
+data_risk_generate_cards.py로 생성된 data/risk_cards.json을 읽어서
 risk / risk_list 테이블에 upsert합니다.
 
 [실행 방법]
