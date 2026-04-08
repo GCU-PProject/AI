@@ -1,7 +1,7 @@
 # 🌍 GLAW AI - 프로젝트 개발 진행 보고서
 
 > 글로벌 법률 비교 AI 서비스 (RAG 기반)  
-> 최종 수정일: 2026-03-05
+> 최종 수정일: 2026-04-08
 
 ---
 
@@ -17,6 +17,7 @@ GLAW(Global Law) AI는 전 세계 법률 정보를 AI로 검색하고 비교할 
 |------|------|
 | **법률 Q&A** | 특정 국가의 법률에 대해 질문하면 관련 조항을 검색하여 AI 답변 생성 |
 | **법률 비교** | 두 국가 간 동일 주제의 법률을 비교하여 공통점과 차이점 분석 |
+| **리스크 카드** | 여행자 조건(국가, 목적, 비자, 연령)에 맞는 법적 리스크 카드 조회 |
 
 ### 1.3 기술 스택
 
@@ -25,7 +26,7 @@ GLAW(Global Law) AI는 전 세계 법률 정보를 AI로 검색하고 비교할 
 | API 서버 | FastAPI + Uvicorn | Python 3.13 |
 | 데이터베이스 | PostgreSQL + pgvector | GCP Cloud SQL |
 | ORM | SQLAlchemy (Async) | asyncpg 드라이버 |
-| AI 프레임워크 | LangChain | v2 구현 |
+| AI 프레임워크 | LangChain | LCEL 파이프라인 |
 | 임베딩 모델 | Google Vertex AI | text-embedding-005 (768차원) |
 | 생성 모델 (LLM) | Google Gemini | gemini-2.0-flash |
 | 데이터 수집 | Requests, BeautifulSoup4 | 캘리포니아 법률 크롤링 |
@@ -70,7 +71,7 @@ GLAW(Global Law) AI는 전 세계 법률 정보를 AI로 검색하고 비교할 
 [크롤링] → [가공] → [임베딩] → [DB 적재]
 ```
 
-### 3.1 크롤링 및 가공 (`crawl_us_ca.py`)
+### 3.1 크롤링 및 가공 (`data_crawl_us_ca.py`)
 
 캘리포니아 주 공식 법률 사이트에서 법령 원문을 수집하고, RAG에 적합한 형태로 가공하였다.
 
@@ -80,7 +81,7 @@ GLAW(Global Law) AI는 전 세계 법률 정보를 AI로 검색하고 비교할 
 - 메타데이터 추출: 법률 종류(`law_type`), 목차(`section_title`), 조항 번호(`article_no`), 본문(`content`), 출처 URL(`source_url`)
 - 출력: `.jsonl` 형식의 정제된 데이터 파일
 
-### 3.2 임베딩 생성 (`embed_to_file.py`)
+### 3.2 임베딩 생성 (`data_embed_to_file.py`)
 
 정제된 법률 텍스트를 벡터(숫자 배열)로 변환하였다.
 
@@ -90,7 +91,7 @@ GLAW(Global Law) AI는 전 세계 법률 정보를 AI로 검색하고 비교할 
 - Vertex AI의 API 호출 제한(Rate Limit)을 고려하여 배치 처리 및 대기 시간 적용
 - 출력: 임베딩 벡터가 포함된 `.jsonl` 파일
 
-### 3.3 DB 적재 (`load_to_db.py`)
+### 3.3 DB 적재 (`db_load_law_data.py`)
 
 생성된 임베딩 데이터를 PostgreSQL 데이터베이스에 저장하였다.
 
@@ -162,16 +163,17 @@ GLAW(Global Law) AI는 전 세계 법률 정보를 AI로 검색하고 비교할 
 | 파라미터 | 값 | 설명 |
 |----------|-----|------|
 | `TOP_K` | 3 | 벡터 검색에서 반환할 최대 문서 수 |
-| `MAX_DISTANCE_THRESHOLD` | 0.85 | L2 거리 기준 임계값. 이 값 이하인 문서만 유효한 검색 결과로 사용 |
+| `MAX_DISTANCE_THRESHOLD` | 0.90 | L2 거리 기준 임계값. 이 값 이하인 문서만 유효한 검색 결과로 사용 |
 | `temperature` | 0 | LLM의 무작위성을 최소화하여 일관된 답변 생성 |
-| `max_output_tokens` | 1024 (Q&A) / 2048 (비교) | 답변 최대 길이 |
+| `max_output_tokens` | 4096 (Q&A) / 2048 (비교) | 답변 최대 길이 |
 
 ### 4.4 API 엔드포인트
 
 | 메서드 | 경로 | 기능 |
 |--------|------|------|
-| POST | `/api/v1/chat` | 법률 Q&A (단일 국가) |
-| POST | `/api/v1/compare` | 법률 비교 (두 국가) |
+| POST | `/api/qna` | 법률 Q&A (단일 국가) |
+| POST | `/api/compare` | 법률 비교 (두 국가) |
+| POST | `/api/risk` | 리스크 카드 조회 |
 
 ### 4.5 v1의 한계점
 
@@ -270,42 +272,60 @@ LLM이 근거 없는 답변을 생성하거나(할루시네이션), 일관되지
 - 초기: LLM이 내부 DB ID(예: "문서 ID: 68722")를 인용하거나, 본문 중간에 법률 코드를 삽입하는 등 일관되지 않은 인용이 발생
 - 개선: 컨텍스트 포맷에서 DB ID를 제거하고 법률 코드를 헤더로 표시. 프롬프트에서 본문 내 법률 코드 삽입을 금지하고, 답변 끝에 [참고 법령] 섹션으로 분리
 
-### 5.6 프로젝트 디렉토리 구조 변경
+### 5.6 프로젝트 디렉토리 구조
 
-v1과 v2를 동시에 유지하기 위해 서비스 폴더를 분리하였다.
+v2 리팩토링 완료 후, v1 코드를 제거하고 단일 구조로 통합하였다.
 
 ```
 src/
-├── v1_services/              # 기존 직접 구현 (유지)
-│   ├── __init__.py
-│   ├── chat_service.py       # v1 Q&A 서비스
-│   └── compare_service.py    # v1 비교 서비스
-├── v2_services/              # LangChain 구현 (신규)
-│   ├── __init__.py
-│   ├── chat_service.py       # v2 Q&A 서비스 (번역 + LCEL)
-│   └── compare_service.py    # v2 비교 서비스 (JsonOutputParser)
-├── api/
-│   ├── v1/endpoint/          # v1 API 라우터 (/api/v1/chat, /api/v1/compare)
-│   └── v2/endpoint/          # v2 API 라우터 (/api/v2/chat, /api/v2/compare)
+├── api/                      # API 엔드포인트
+│   └── endpoint/
+│       ├── chat.py            # 법률 Q&A (/api/qna)
+│       ├── compare.py         # 법률 비교 (/api/compare)
+│       └── risk.py            # 리스크 카드 (/api/risk)
 ├── core/
-│   ├── config.py             # 환경변수 관리 (pydantic-settings)
-│   ├── database.py           # 비동기 DB 연결 (asyncpg)
-│   └── models.py             # SQLAlchemy ORM 모델 (Country, Law)
+│   ├── config.py              # 환경변수 관리 (pydantic-settings)
+│   ├── database.py            # 비동기 DB 연결 (asyncpg)
+│   └── models.py              # SQLAlchemy ORM 모델 (Country, Law, Risk, RiskList)
 ├── schemas/
-│   ├── chat.py               # Q&A 요청/응답 스키마
-│   ├── compare.py            # 비교 요청/응답 스키마
-│   └── common.py             # 공통 응답 스키마
-├── scripts/                  # 유틸리티 스크립트
-│   ├── crawl_us_ca.py        # 캘리포니아 법률 크롤링 및 가공
-│   ├── embed_to_file.py      # 임베딩 생성
-│   ├── load_to_db.py         # DB 적재
-│   └── check_distance.py     # 벡터 거리 테스트
-└── main.py                   # FastAPI 앱 진입점 (v1 + v2 라우터 등록)
+│   ├── chat.py                # Q&A 요청/응답 스키마
+│   ├── compare.py             # 비교 요청/응답 스키마
+│   ├── risk.py                # 리스크 요청/응답 스키마
+│   └── common.py              # 공통 응답 스키마
+├── services/                  # 비즈니스 로직 (LangChain 기반)
+│   ├── chat_service.py        # RAG Q&A 파이프라인
+│   ├── compare_service.py     # 법률 비교 분석
+│   ├── risk_service.py        # 리스크 카드 조회
+│   └── memory.py              # 대화 기록 관리 (세션)
+├── prompts/                   # LLM 프롬프트 (YAML 외부화)
+│   ├── chat.yaml              # Q&A 답변 생성
+│   ├── compare.yaml           # 비교 분석
+│   ├── translation.yaml       # 질문 번역
+│   ├── contextualize.yaml     # 질문 재구성
+│   ├── risk_card_topics.yaml  # 리스크 주제 생성 (스크립트용)
+│   └── risk_card_content.yaml # 리스크 본문 생성 (스크립트용)
+├── scripts/                   # 유틸리티 스크립트
+│   ├── data_crawl_us_ca.py      # 캘리포니아 법률 크롤링 및 가공
+│   ├── data_process_us_ca.py    # 크롤링 데이터 가공
+│   ├── data_process_au.py       # 호주 데이터 가공
+│   ├── data_process_ko.py       # 한국 데이터 가공
+│   ├── data_embed_to_file.py    # 임베딩 생성
+│   ├── data_check_distance.py   # 벡터 거리 테스트
+│   ├── data_check_models.py     # GCP 모델 연결 테스트
+│   ├── ragas_evaluate_rag.py    # RAG 성능 평가
+│   ├── ragas_generate_dataset.py # RAGAS 평가 데이터셋 생성
+│   ├── db_load_law_data.py      # DB 적재
+│   ├── db_insert_countries.py   # 국가 초기 데이터 삽입
+│   ├── db_check_connection.py   # DB 연결 확인
+│   ├── db_create_risk_tables.py # 리스크 테이블 생성
+│   ├── db_load_risk_cards.py    # 리스크 카드 DB 적재
+│   └── data_risk_generate_cards.py   # 리스크 카드 생성 (LLM 호출)
+└── main.py                    # FastAPI 앱 진입점
 ```
 
-### 5.7 v2 API 스펙
+### 5.7 API 스펙
 
-#### POST `/api/v2/chat` (법률 Q&A)
+#### POST `/api/qna` (법률 Q&A)
 
 **요청:**
 ```json
@@ -329,7 +349,7 @@ src/
 }
 ```
 
-#### POST `/api/v2/compare` (법률 비교)
+#### POST `/api/compare` (법률 비교)
 
 **요청:**
 ```json
@@ -384,10 +404,10 @@ v2 서비스에 대화 맥락 기억 기능을 추가하여, 사용자가 후속
 
 | 파일 | 역할 |
 |------|------|
-| `v2_services/memory.py` (신규) | 대화 기록 저장, 질문 재구성, 기록 저장 |
-| `v2_services/chat_service.py` | session_id 파라미터 추가, 메모리 연동 |
+| `services/memory.py` (신규) | 대화 기록 저장, 질문 재구성, 기록 저장 |
+| `services/chat_service.py` | session_id 파라미터 추가, 메모리 연동 |
 | `schemas/chat.py` | ChatRequest에 session_id 필드 추가 (Optional) |
-| `api/v2/endpoint/chat.py` | session_id를 서비스에 전달 |
+| `api/endpoint/chat.py` | session_id를 서비스에 전달 |
 
 **핵심 로직 - 질문 재구성 (Contextualize Question):**
 ```
@@ -492,11 +512,11 @@ if not contextualized or not contextualized.strip():
 
 | 파일 | 변경 내용 |
 |------|-----------|
-| `v2_services/memory.py` | 질문 재구성 프롬프트 few-shot 예시 추가 |
-| `v2_services/memory.py` | 슬라이딩 윈도우 3쌍(6메시지) 적용 |
-| `v2_services/memory.py` | 빈 문자열 안전장치 추가 |
-| `v2_services/chat_service.py` | `MAX_DISTANCE_THRESHOLD` 0.85 → 0.90 |
-| `v2_services/chat_service.py` | `max_output_tokens` 1024 → 2048 |
+| `services/memory.py` | 질문 재구성 프롬프트 few-shot 예시 추가 |
+| `services/memory.py` | 슬라이딩 윈도우 3쌍(6메시지) 적용 |
+| `services/memory.py` | 빈 문자열 안전장치 추가 |
+| `services/chat_service.py` | `MAX_DISTANCE_THRESHOLD` 0.85 → 0.90 |
+| `services/chat_service.py` | `max_output_tokens` 1024 → 4096 |
 
 ### 6.6 입력 검증 강화 (2026-03-05)
 
@@ -523,7 +543,7 @@ def check_country_ids(self):  # self = 모든 필드가 들어있는 객체
 ```
 
 - `raise ValueError`가 실행되면 서비스 코드까지 도달하지 않고, FastAPI가 자동으로 **422 Validation Error** 응답을 반환한다.
-- 스키마에서 검증하면 v1, v2 어떤 엔드포인트를 사용하든 동일한 규칙이 적용된다.
+- 스키마에서 검증하면 어떤 엔드포인트를 사용하든 동일한 규칙이 적용된다.
 
 #### 6.6.2 검증 규칙
 
@@ -547,14 +567,14 @@ def check_country_ids(self):  # self = 모든 필드가 들어있는 객체
 `country_id`가 DB에 존재하는지 확인하는 검증은 **스키마가 아닌 엔드포인트**에서 처리한다. 그 이유는 스키마에서는 DB에 접근할 수 없기 때문이다.
 
 ```python
-# api/v2/endpoint/chat.py - chat 엔드포인트
+# api/endpoint/chat.py - chat 엔드포인트
 country = await db.execute(
     select(Country).where(Country.country_id == request.country_id)
 )
 if not country.scalar():
     return CommonResponse(code="AI404", message="존재하지 않는 국가 ID입니다")
 
-# api/v2/endpoint/chat.py - compare 엔드포인트
+# api/endpoint/compare.py - compare 엔드포인트
 # .in_()을 사용하여 두 국가를 한 번의 쿼리로 동시에 조회
 country_results = await db.execute(
     select(Country).where(
@@ -573,9 +593,9 @@ if len(countries) != 2:  # 2개가 아니면 하나 이상이 존재하지 않�
     ↓
 ① 스키마 (schemas/)            → 빈 질문 차단, 같은 국가 비교 차단
     ↓
-② 엔드포인트 (api/v2/endpoint/) → country_id DB 존재 여부 체크
+② 엔드포인트 (api/endpoint/) → country_id DB 존재 여부 체크
     ↓
-③ 서비스 (v2_services/)         → 법률 데이터 유무 체크
+③ 서비스 (services/)         → 법률 데이터 유무 체크
     ↓
 LLM 호출
 ```
@@ -691,15 +711,17 @@ save_to_history(session_id, search_query, final_answer)    # 재구성: "교통�
 | `schemas/chat.py` | `@field_validator("query")` 추가 - 빈 질문 차단 |
 | `schemas/compare.py` | `@field_validator("query")` 추가 - 빈 질문 차단 |
 | `schemas/compare.py` | `@model_validator` 추가 - 같은 국가 비교 방지 |
-| `api/v2/endpoint/chat.py` | country_id DB 존재 여부 검증 추가 |
-| `api/v2/endpoint/chat.py` | 에러 핸들링 세분화 (ConnectionError, ValueError, Exception) |
-| `v2_services/chat_service.py` | `translate_query()` 에러 처리 추가 |
-| `v2_services/chat_service.py` | `save_to_history` 재구성 질문 저장으로 변경 |
-| `v2_services/compare_service.py` | 한쪽만 데이터 없을 때도 비교 결과 반환 |
+| `api/endpoint/chat.py` | country_id DB 존재 여부 검증 추가 |
+| `api/endpoint/chat.py` | 에러 핸들링 세분화 (ConnectionError, ValueError, Exception) |
+| `services/chat_service.py` | `translate_query()` 에러 처리 추가 |
+| `services/chat_service.py` | `save_to_history` 재구성 질문 저장으로 변경 |
+| `services/compare_service.py` | 한쪽만 데이터 없을 때도 비교 결과 반환 |
 
 ---
 
-### 6.11 Streaming 응답 구현 (2026-03-09)
+### 6.11 ~~Streaming 응답 구현 (2026-03-09)~~ → 삭제됨 (2026-04-08)
+
+> **참고**: Streaming 기능은 사용하지 않기로 결정하여, 코드베이스 정리 시 제거하였다. 아래는 당시 구현했던 기술적 기록이다.
 
 기존 `/chat` 엔드포인트는 LLM이 전체 답변을 생성한 후 한꺼번에 반환하는 방식이었다. 이 경우 사용자는 답변이 완성될 때까지 빈 화면을 보게 된다. Streaming을 적용하면 LLM이 토큰을 생성하는 즉시 실시간으로 전송하여, 사용자가 첫 응답을 빠르게 받을 수 있다.
 
@@ -775,14 +797,12 @@ async def chat_stream_endpoint(request, db):
 
 ---
 
-### 6.12 수정 파일 요약 (2026-03-09)
+### ~~6.12 수정 파일 요약 (2026-03-09)~~ → 삭제됨 (2026-04-08)
 
-| 파일 | 변경 내용 |
-|------|-----------|
-| `v2_services/chat_service.py` | `generate_answer_stream()` 함수 추가 (astream + yield) |
-| `v2_services/chat_service.py` | `import json` 추가 |
-| `api/v2/endpoint/chat.py` | `/chat/stream` 엔드포인트 추가 |
-| `api/v2/endpoint/chat.py` | `StreamingResponse`, `generate_answer_stream` import 추가 |
+| 파일 | 변경 내용 | 현재 상태 |
+|------|-----------|---------|
+| `services/chat_service.py` | `generate_answer_stream()` 함수 추가 | ❌ 삭제됨 |
+| `api/endpoint/chat.py` | `/chat/stream` 엔드포인트 추가 | ❌ 삭제됨 |
 
 ---
 
@@ -801,7 +821,7 @@ async def chat_stream_endpoint(request, db):
 **목표**: 향후 Reranker 도입이나 Hybrid Search 적용 시 검색 품질 변화를 정량적으로 측정하기 위한 자동화된 테스트 베드를 구축한다.
 
 **구현 내용**:
-- `src/scripts/generate_dataset.py` 파이프라인을 구축하여, DB에 적재된 법률 조항(Chunk)을 기반으로 RAG 모델 평가용 합성 데이터셋(Synthetic Dataset)을 일관성 있게 자동 생성한다.
+- `src/scripts/ragas_generate_dataset.py` 파이프라인을 구축하여, DB에 적재된 법률 조항(Chunk)을 기반으로 RAG 모델 평가용 합성 데이터셋(Synthetic Dataset)을 일관성 있게 자동 생성한다.
 - 최신 **RAGAS 0.4.x API**의 `KnowledgeGraph`와 `Synthesizers` 아키텍처를 도입하여, 단순 검색용 1차원적 문맥 질문(SingleHop)뿐만 아니라 복잡한 추론 질문(MultiHop)까지 다양한 난이도가 포함된 현실적인 평가 데이터셋을 확보할 수 있게 되었다.
 
 ---

@@ -39,7 +39,7 @@ async def step2_load_to_db():
     # --------------------------------------------------
     # 4. 파일 탐색 (Embedded 파일 찾기)
     # --------------------------------------------------
-    # 프로젝트 루트 경로 (src/scripts/load_to_db.py 기준 ../../)
+    # 프로젝트 루트 경로 (src/scripts/db_load_law_data.py 기준 ../../)
     base_dir = os.path.dirname(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     )

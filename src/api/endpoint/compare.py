@@ -7,7 +7,7 @@ from src.core.database import get_db
 from src.schemas.common import CommonResponse
 from src.schemas.compare import CompareRequest, CompareResult
 from src.core.models import Country
-from src.v2_services.compare_service import compare_laws
+from src.services.compare_service import compare_laws
 from fastapi.responses import JSONResponse
 
 router = APIRouter()
@@ -28,10 +28,10 @@ def _error_response(status: int, code: str, message: str) -> JSONResponse:
 @router.post("/compare", response_model=CommonResponse)
 async def compare_endpoint(request: CompareRequest, db: AsyncSession = Depends(get_db)):
     """
-    [v2 LangChain] 국가 간 법률 비교 API
+    국가 간 법률 비교 API
 
-    v1과 요청/응답 형식은 동일하며, 내부적으로 LangChain 기반 서비스를 호출합니다.
-    v2에서 추가된 기능: 질문 영어 번역, JsonOutputParser 자동 파싱
+    LangChain 기반 서비스를 호출합니다.
+    기능: 질문 영어 번역, JsonOutputParser 자동 파싱
     """
 
     if request.country_id_1 == request.country_id_2:

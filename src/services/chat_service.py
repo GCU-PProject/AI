@@ -1,23 +1,12 @@
-# src/v2_services/chat_service.py
+# src/services/chat_service.py
 """
-[v2] LangChain 기반 법률 Q&A 서비스 (RAG - Retrieval-Augmented Generation)
+LangChain 기반 법률 Q&A 서비스 (RAG - Retrieval-Augmented Generation)
 
 이 파일은 사용자의 법률 질문에 대해 관련 법률 조항을 검색(Retrieval)하고,
 검색된 조항을 근거로 AI가 답변을 생성(Generation)하는 RAG 파이프라인을 구현합니다.
 
-[v1과의 핵심 차이점]
-v1에서는 Google Vertex AI SDK를 직접 호출하여 임베딩, 검색, 프롬프트, LLM 호출을
-모두 수동으로 연결했습니다. v2에서는 LangChain 프레임워크를 사용하여 각 단계를
-독립적인 컴포넌트로 분리하고, LCEL(LangChain Expression Language) 파이프라인으로
-연결합니다.
-
-| 구분       | v1 (직접 구현)                     | v2 (LangChain)              |
-|------------|------------------------------------|-----------------------------|
-| 임베딩     | TextEmbeddingModel.from_pretrained | VertexAIEmbeddings          |
-| LLM        | GenerativeModel                    | ChatVertexAI                |
-| 프롬프트   | Python f-string 직접 조립          | ChatPromptTemplate          |
-| 체인 연결  | 각 단계를 수동으로 순차 호출       | LCEL 파이프라인 (| 연산자)  |
-| JSON 파싱  | json.loads() 수동 파싱             | JsonOutputParser            |
+LangChain 프레임워크를 사용하여 각 단계를 독립적인 컴포넌트로 분리하고,
+LCEL(LangChain Expression Language) 파이프라인으로 연결합니다.
 
 [전체 처리 흐름]
 사용자 질문 (한국어)
@@ -28,7 +17,6 @@ v1에서는 Google Vertex AI SDK를 직접 호출하여 임베딩, 검색, 프�
     → 5단계: LLM(Gemini)이 근거 자료 기반으로 답변 생성
     → 6단계: API 응답 반환
 """
-import json
 import logging
 from typing import Dict, Any, List, Optional
 from langchain_google_vertexai import VertexAIEmbeddings, ChatVertexAI
@@ -40,7 +28,7 @@ from sqlalchemy import select
 from langchain_core.prompts import load_prompt
 from src.core.models import Law
 from src.core.config import settings
-from src.v2_services.memory import contextualize_question, save_to_history
+from src.services.memory import contextualize_question, save_to_history
 
 
 logger = logging.getLogger(__name__)
@@ -70,7 +58,6 @@ MAX_DISTANCE_THRESHOLD = 0.90
 # 2. AI 모델 초기화
 # =========================================================
 # 이 모듈이 import될 때 한 번만 실행됩니다.
-# v1에서는 요청마다 vertexai.init()을 호출했지만,
 # LangChain에서는 객체를 모듈 로드 시 한 번만 생성하면
 # 이후 모든 요청에서 재사용됩니다.
 
@@ -174,10 +161,6 @@ async def translate_query(query: str) -> str:
 # =========================================================
 # LLM에게 전달할 시스템 프롬프트입니다.
 # 이 프롬프트는 LLM의 행동 규칙, 답변 형식, 가드레일(안전장치)을 정의합니다.
-#
-# [v1 → v2 변경점]
-# - v1: Python f-string으로 직접 조립 → 변수에 중괄호{}가 있으면 이스케이프 필요
-# - v2: ChatPromptTemplate 사용 → {context}, {question}만 자동 치환, 나머지 {}는 그대로
 #
 # [프롬프트 설계 핵심]
 # 1. 가드레일 (할루시네이션 방지):
@@ -377,7 +360,7 @@ async def generate_answer(
             "search_success": True/False  # 관련 법률을 찾았는지 여부
         }
     """
-    print(f"🌍 [v2/LangChain] 국가 필터링 적용: ID {country_id}")
+    print(f"🌍 국가 필터링 적용: ID {country_id}")
 
     # ----- Step 0: 질문 재구성 (대화 맥락 반영) -----
     # session_id가 있으면 이전 대화 기록을 참고하여 후속 질문을 독립적 질문으로 재구성
@@ -447,72 +430,3 @@ async def generate_answer(
         "related_law_id_list": law_ids,
         "search_success": True,
     }
-
-
-async def generate_answer_stream(
-    query: str, db: AsyncSession, country_id: int, session_id: Optional[str] = None
-):
-    """
-    [v2 Streaming] 답변을 실시간으로 전송하는 함수.
-    generate_answer와 동일하지만 ainvoke() 대신 astream()을 사용합니다.
-    """
-    print(f"🌍 [v2/LangChain] 국가 필터링 적용: ID {country_id}")
-
-    try:
-        # 질문 재구성
-        search_query = query
-        if session_id:
-            search_query = await contextualize_question(query, session_id, llm)
-
-        # 번역
-        translated_query = await translate_query(search_query)
-
-        # 벡터 검색
-        docs, law_ids = await retrieve_laws(translated_query, country_id, db)
-
-        # 검색 결과 없을 시 안내
-        if not docs:
-            yield f"data: 죄송합니다. 질문하신 내용과 관련된 정확한 법률 정보를 찾을 수 없습니다. (관련도 낮음)\n\n"
-            meta = json.dumps(
-                {
-                    "related_law_id_list": [],
-                    "search_success": False,
-                }
-            )
-            yield f"data: [META]{meta}\n\n"
-            yield f"data: [DONE]\n\n"
-            return
-
-        # 컨텍스트 포맷
-        context = format_docs(docs)
-
-        # streaming 답변 생성
-        chain = CHAT_PROMPT | llm | StrOutputParser()
-        full_answer = ""
-
-        async for chunk in chain.astream({"context": context, "question": query}):
-            full_answer += chunk
-            yield f"data: {chunk}\n\n"
-
-        # 대화 기록 저장
-        if session_id:
-            save_to_history(session_id, search_query, full_answer)
-
-        # 메타데이터 전송
-        meta = json.dumps(
-            {
-                "related_law_id_list": law_ids,
-                "search_success": True,
-            }
-        )
-        yield f"data: [META]{meta}\n\n"
-        yield f"data: [DONE]\n\n"
-
-    except Exception as e:
-        import traceback
-
-        traceback.print_exc()
-        # 오류 메시지 중에 줄바꿈이 있으면 SSE 포맷이 깨질 수 있으므로 제거/치환
-        error_msg = str(e).replace("\\n", " ")
-        yield f"data: [ERROR] 스트리밍 중 오류가 발생했습니다: {error_msg}\n\n"
-        yield f"data: [DONE]\n\n"

@@ -7,7 +7,7 @@ from src.core.database import get_db
 from src.schemas.common import CommonResponse
 from src.schemas.risk import RiskRequest
 from src.core.models import Country
-from src.v2_services.risk_service import get_risk_cards
+from src.services.risk_service import get_risk_cards
 from fastapi.responses import JSONResponse
 
 router = APIRouter()
@@ -24,10 +24,11 @@ def _error_response(status: int, code: str, message: str) -> JSONResponse:
     )
     return JSONResponse(status_code=status, content=payload.model_dump())
 
+
 @router.post("/risk", response_model=CommonResponse)
 async def get_risk_endpoint(request: RiskRequest, db: AsyncSession = Depends(get_db)):
     """
-    [v2] 리스크 카드 조회 API
+    리스크 카드 조회 API
     """
     try:
         country = await db.execute(

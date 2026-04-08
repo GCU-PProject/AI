@@ -1,6 +1,6 @@
-# src/v2_services/compare_service.py
+# src/services/compare_service.py
 """
-[v2] LangChain 기반 법률 비교 서비스
+LangChain 기반 법률 비교 서비스
 
 이 파일은 두 국가의 법률을 비교 분석하는 서비스를 구현합니다.
 사용자가 하나의 질문(예: "음주운전 처벌")을 입력하면,
@@ -25,15 +25,7 @@ JSON 형식의 비교 결과를 반환합니다.
 | 검색 횟수    | 1회 (1개 국가)          | 2회 (2개 국가 각각)          |
 | 출력 형식    | 자유 텍스트 (문자열)    | 구조화된 JSON               |
 | 출력 파서    | StrOutputParser        | JsonOutputParser             |
-| max_tokens   | 1024                   | 2048 (비교 분석이 더 길므로) |
-
-[v1 → v2 주요 변경점]
-| 구분         | v1 (직접 구현)                        | v2 (LangChain)                      |
-|--------------|---------------------------------------|--------------------------------------|
-| 프롬프트     | f-string ({{ }} 이중 이스케이프 필요) | ChatPromptTemplate (이스케이프 불필요)|
-| JSON 파싱    | json.loads() 수동 파싱                | JsonOutputParser (자동 파싱 + 에러 처리)|
-| LLM          | GenerativeModel                       | ChatVertexAI                         |
-| 검색         | 자체 검색 함수 구현                   | chat_service의 retrieve_laws() 재사용 |
+| max_tokens   | 4096                   | 2048 (비교 분석이 더 길므로) |
 
 [전체 처리 흐름]
 사용자 질문 (한국어)
@@ -64,7 +56,7 @@ from src.core.config import settings
 # import하여 재사용합니다. 이렇게 하면:
 # 1. 코드 중복을 방지 (DRY 원칙: Don't Repeat Yourself)
 # 2. 검색/번역 로직 수정 시 chat_service.py만 변경하면 됨
-from src.v2_services.chat_service import (
+from src.services.chat_service import (
     retrieve_laws,  # 벡터 유사도 기반 법률 검색 함수
     format_docs,  # Document 리스트 → 프롬프트 텍스트 변환 함수
     translate_query,  # 한국어 → 영어 번역 함수
@@ -100,12 +92,7 @@ llm = ChatVertexAI(
 # - chat_service: {context} 1개 (단일 국가) → 자유 텍스트 답변
 # - compare_service: {context_1}, {context_2} 2개 (두 국가) → JSON 형식 답변
 #
-# [v1 → v2 프롬프트 변경점]
-# v1에서는 f-string 내에서 JSON 중괄호 {}를 사용하려면
-# {{ }} 이중 이스케이프가 필요했습니다.
-# 예: f"결과: {{'key': 'value'}}"  ← 읽기 어렵고 실수하기 쉬움
-#
-# v2에서는 ChatPromptTemplate이 {variable}만 변수로 치환하므로
+# ChatPromptTemplate이 {variable}만 변수로 치환하므로
 # 일반 { }를 그대로 사용할 수 있습니다.
 
 # 비교 분석용 시스템 프롬프트
@@ -119,9 +106,8 @@ llm = ChatVertexAI(
 # 프롬프트 정의 시점에 이미 값이 고정됩니다.
 
 # JsonOutputParser: LLM의 응답을 자동으로 JSON(Python dict)으로 변환
-# - v1에서는 json.loads()로 수동 파싱했지만, 파싱 실패 시 에러 처리가 복잡했습니다.
-# - JsonOutputParser는 LLM 응답에서 JSON 부분을 자동으로 추출하고,
-#   마크다운 코드 블록(```json ... ```) 안에 있어도 정상적으로 파싱합니다.
+# LLM 응답에서 JSON 부분을 자동으로 추출하고,
+# 마크다운 코드 블록(```json ... ```) 안에 있어도 정상적으로 파싱합니다.
 parser = JsonOutputParser()
 
 # 비교 분석용 프롬프트 템플릿
@@ -142,13 +128,7 @@ COMPARE_PROMPT = ChatPromptTemplate.from_messages(
 # =========================================================
 # 3. [메인] 법률 비교 서비스
 # =========================================================
-# 이 함수가 API 엔드포인트(/api/v2/compare)에서 호출되는 최종 진입점입니다.
-#
-# [chat_service의 generate_answer()와의 차이점]
-# 1. 검색을 2회 수행 (두 국가 각각)
-# 2. 한쪽이라도 검색 결과가 없으면 비교 불가로 처리
-# 3. LLM 응답을 JSON으로 파싱 (StrOutputParser 대신 JsonOutputParser 사용)
-# 4. 응답 구조가 다름: 각 국가별 요약 + 공통점/차이점
+# 이 함수가 API 엔드포인트(/api/compare)에서 호출되는 최종 진입점입니다.
 
 
 async def compare_laws(
@@ -286,7 +266,7 @@ async def compare_laws(
             }
         )
     except Exception as e:
-        print(f"❌ [v2] Gemini 호출/파싱 실패: {e}")
+        print(f"❌ Gemini 호출/파싱 실패: {e}")
         analysis = {
             "summary_1": "분석 실패",
             "summary_2": "분석 실패",

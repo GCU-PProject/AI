@@ -1,4 +1,4 @@
-# src/scripts/check_distance.py
+# src/scripts/data_check_distance.py
 
 import asyncio
 import os
@@ -6,7 +6,6 @@ import sys
 from dotenv import load_dotenv
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy import select
-from vertexai.language_models import TextEmbeddingInput
 
 # 1. 프로젝트 루트 경로 설정
 sys.path.append(
@@ -16,8 +15,8 @@ sys.path.append(
 from src.core.models import Law
 from src.core.config import settings
 
-# ✅ rag_service에서 모델 로드 함수와 설정을 그대로 가져옵니다. (로직 일치 보장)
-from src.v1_services.chat_service import get_models, MAX_DISTANCE_THRESHOLD
+# chat_service에서 임베딩 모델과 임계값 설정을 가져옵니다. (로직 일치 보장)
+from src.services.chat_service import embeddings, MAX_DISTANCE_THRESHOLD
 
 load_dotenv()
 
@@ -35,17 +34,12 @@ async def check_distance():
         f"🔄 분석 시작... 질문: '{TEST_QUERY}' (Target Country ID: {TEST_COUNTRY_ID})"
     )
 
-    # 1. rag_service와 동일한 모델 로드 함수 사용
-    embedding_model, _ = get_models()
-
-    # 2. DB 엔진 생성
+    # 1. DB 엔진 생성
     engine = create_async_engine(settings.ASYNC_DATABASE_URL, echo=False)
 
-    # 3. 질문 임베딩 (rag_service와 동일한 방식)
+    # 2. 질문 임베딩 (chat_service와 동일한 방식)
     try:
-        text_input = TextEmbeddingInput(text=TEST_QUERY, task_type="RETRIEVAL_QUERY")
-        embeddings = embedding_model.get_embeddings([text_input])
-        query_vector = embeddings[0].values
+        query_vector = embeddings.embed_query(TEST_QUERY)
     except (ValueError, RuntimeError) as e:
         print(f"❌ 임베딩 실패: {e}")
         return

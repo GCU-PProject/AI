@@ -1,4 +1,4 @@
-# src/v2_services/memory.py
+# src/services/memory.py
 """
 대화 기록 관리 모듈 (Conversation Memory)
 
