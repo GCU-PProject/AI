@@ -3,7 +3,7 @@
 FastAPI 앱의 진입점 (Entry Point)
 
 이 파일은 FastAPI 애플리케이션을 생성하고,
-각 버전(v1, v2)의 API 라우터를 등록합니다.
+API 라우터를 등록합니다.
 
 [서버 실행 방법]
 uvicorn src.main:app --reload
@@ -12,10 +12,9 @@ uvicorn src.main:app --reload
 
 [API 구조]
 /                  → 헬스 체크 (서버 상태 확인)
-/api/v1/chat       → v1 법률 Q&A (Vertex AI SDK 직접 호출)
-/api/v1/compare    → v1 법률 비교
-/api/qna           → v2 법률 Q&A (LangChain 기반)
-/api/compare       → v2 법률 비교
+/api/qna           → 법률 Q&A (LangChain 기반)
+/api/compare       → 법률 비교
+/api/risk          → 리스크 카드 조회
 
 [load_dotenv()가 import보다 먼저 오는 이유]
 .env 파일의 환경변수(GCP 인증 정보 등)를 OS에 먼저 등록해야
@@ -35,10 +34,9 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, timezone
 from src.core.config import settings
-from src.api.v1.endpoint import chat  # v1 라우터 (Vertex AI 직접 호출)
-from src.api.v2.endpoint import chat as chat_v2  # v2 라우터 (LangChain 기반)
-from src.api.v2.endpoint import compare as compare_v2  # v2 비교 API 라우터
-from src.api.v2.endpoint import risk as risk_v2  # v2 리스크 API 라우터
+from src.api.endpoint import chat as chat  # 챗봇 API 라우터
+from src.api.endpoint import compare as compare  # 비교 API 라우터
+from src.api.endpoint import risk as risk  # 리스크 API 라우터
 
 # FastAPI 앱 생성
 # - title: Swagger 문서(/docs)에 표시되는 API 이름
@@ -57,18 +55,13 @@ app.add_middleware(
 # 라우터 등록
 # =========================================================
 # include_router(): 별도 파일에서 정의한 엔드포인트들을 앱에 연결합니다.
-# - prefix: URL 앞에 붙는 경로 (예: /api/v1/chat)
+# - prefix: URL 앞에 붙는 경로 (예: /api/qna)
 # - tags: Swagger 문서에서 그룹핑할 이름
 
-# v1 라우터: /api/v1/chat, /api/v1/compare
-app.include_router(
-    chat.router, prefix="/api/v1", tags=["Chat V1 API (초기 직접구현 API로 미사용)"]
-)
-
-# v2 라우터: /api/qna, /api/compare, /api/risk
-app.include_router(chat_v2.router, prefix="/api", tags=["Chat API"])
-app.include_router(compare_v2.router, prefix="/api", tags=["Compare API"])
-app.include_router(risk_v2.router, prefix="/api", tags=["Risk API"])
+# 라우터: /api/qna, /api/compare, /api/risk
+app.include_router(chat.router, prefix="/api", tags=["Chat API"])
+app.include_router(compare.router, prefix="/api", tags=["Compare API"])
+app.include_router(risk.router, prefix="/api", tags=["Risk API"])
 
 
 # =========================================================
@@ -80,7 +73,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     FastAPI의 기본 422 Unprocessable Entity 에러를 가로채서,
     팀의 공동 API 명세서에 맞게 400 COMMON400 에러로 변환하여 응답합니다.
     """
-    
+
     missing_fields = []
     for error in exc.errors():
         loc = error.get("loc", [])
@@ -88,19 +81,19 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
             missing_fields.append(str(loc[-1]))
         else:
             missing_fields.append(str(loc[0]))
-            
+
     fields_str = ", ".join(missing_fields)
     message = f"요청 처리 중 오류 : 필수 입력값({fields_str})을 확인해주세요."
-    
+
     content = {
         "success": False,
         "status": 400,
         "code": "COMMON400",
         "message": message,
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "result": None
+        "result": None,
     }
-    
+
     return JSONResponse(status_code=400, content=content)
 
 

@@ -42,7 +42,7 @@ from sqlalchemy import select
 
 from src.core.config import settings
 from src.core.models import Country
-from src.v2_services.chat_service import retrieve_laws, format_docs
+from src.services.chat_service import retrieve_laws, format_docs
 
 
 # =========================================================
