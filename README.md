@@ -12,6 +12,35 @@ Google Vertex AI(Gemini)를 활용하여 답변을 생성하는 서비스입니�
 - **법률 비교** (`/api/compare`): 두 국가 간 법률을 비교하여 공통점과 차이점 분석
 - **리스크 카드** (`/api/risk`): 여행자 조건(국가, 목적, 비자, 연령)에 맞는 법적 리스크 카드 조회
 
+### 리스크 카드 조합
+
+리스크 카드는 아래 4가지를 묶어서 만듭니다.
+
+- 국가 (`country_id`)
+- 여행 목적 (`travel_purpose`)
+- 비자 종류 (`visa_type`)
+- 연령대 (`age_band`)
+
+현재 코드에서 사용하는 값은 아래와 같습니다.
+
+- `travel_purpose`
+  - `tourism`, `business`, `study`, `work`, `working_holiday`
+- `visa_type`
+  - `short_stay`, `long_stay`, `work_permit`, `student_visa`
+- `age_band`
+  - `10s`, `20s`, `30s`, `40s`, `50s_plus`
+
+즉, 한 국가 기준으로는
+- 여행 목적 5개 × 비자 4개 × 연령대 5개 = **총 100가지 경우**를 만듭니다.
+
+예시
+- `country_id=1`, `travel_purpose=tourism`, `visa_type=short_stay`, `age_band=20s`
+- 이 입력 1건에 대해 리스크 주제를 만들고, 관련 법령을 붙여 최종 리스크 카드를 생성합니다.
+
+참고
+- 실제 값 목록은 `src/scripts/data_risk_generate_cards.py`의 `TRAVEL_PURPOSES`, `VISA_TYPES`, `AGE_BANDS`와 동일합니다.
+- API 요청/응답 필드는 `src/schemas/risk.py`를 확인하세요.
+
 ### 🗂 국가 ID 매핑 (API 요청 시 참고)
 
 | country_id | 국가 | 주/지역 |
@@ -76,7 +105,7 @@ GLAW/AI/
 │   │   ├── db_load_risk_cards.py     # 리스크 카드 DB 적재
 │   │   ├── db_insert_countries.py    # 국가 초기 데이터 삽입
 │   │   ├── db_check_connection.py    # DB 연결 확인
-│   │   └── risk_generate_cards.py    # 리스크 카드 생성 (LLM 호출)
+│   │   └── data_risk_generate_cards.py    # 리스크 카드 생성 (LLM 호출)
 │   └── main.py               # FastAPI 앱 진입점
 ├── data/                     # 크롤링/임베딩 데이터 (.jsonl)
 ├── keys/                     # GCP 인증키 (Git 미포함)

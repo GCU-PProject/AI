@@ -319,7 +319,7 @@ src/
 │   ├── db_check_connection.py   # DB 연결 확인
 │   ├── db_create_risk_tables.py # 리스크 테이블 생성
 │   ├── db_load_risk_cards.py    # 리스크 카드 DB 적재
-│   └── risk_generate_cards.py   # 리스크 카드 생성 (LLM 호출)
+│   └── data_risk_generate_cards.py   # 리스크 카드 생성 (LLM 호출)
 └── main.py                    # FastAPI 앱 진입점
 ```
 
