@@ -62,20 +62,21 @@ GLAW/AI/
 │   │   ├── risk_card_topics.yaml  # 리스크 주제 생성 프롬프트 (스크립트용)
 │   │   └── risk_card_content.yaml # 리스크 본문 생성 프롬프트 (스크립트용)
 │   ├── scripts/              # 유틸리티 스크립트
-│   │   ├── crawl_us_ca.py         # 미국(캘리포니아) 법률 크롤러
-│   │   ├── process_us_ca.py       # 크롤링 데이터 가공
-│   │   ├── process_au.py          # 호주 데이터 가공
-│   │   ├── embed_to_file.py       # 임베딩 벡터 생성
-│   │   ├── load_to_db.py          # DB 적재
-│   │   ├── generate_risk_cards.py # 리스크 카드 생성 (LLM 호출)
-│   │   ├── load_risk_cards.py     # 리스크 카드 DB 적재
-│   │   ├── create_risk_tables.py  # 리스크 테이블 생성
-│   │   ├── check_distance.py      # 벡터 거리 테스트
-│   │   ├── check_models.py        # GCP 모델 연결 테스트
-│   │   ├── insert_countries.py    # 국가 초기 데이터 삽입
-│   │   ├── db_check.py            # DB 연결 확인
-│   │   ├── evaluate_rag.py        # RAG 성능 평가
-│   │   └── generate_dataset.py    # RAGAS 평가 데이터셋 생성
+│   │   ├── data_crawl_us_ca.py       # 미국(캘리포니아) 법률 크롤러
+│   │   ├── data_process_us_ca.py     # 크롤링 데이터 가공
+│   │   ├── data_process_au.py        # 호주 데이터 가공
+│   │   ├── data_process_ko.py        # 한국 데이터 가공
+│   │   ├── data_embed_to_file.py     # 임베딩 벡터 생성
+│   │   ├── ragas_generate_dataset.py # RAGAS 평가 데이터셋 생성
+│   │   ├── ragas_evaluate_rag.py     # RAG 성능 평가
+│   │   ├── data_check_distance.py    # 벡터 거리 테스트
+│   │   ├── data_check_models.py      # GCP 모델 연결 테스트
+│   │   ├── db_load_law_data.py       # 법률 데이터 DB 적재
+│   │   ├── db_create_risk_tables.py  # 리스크 테이블 생성
+│   │   ├── db_load_risk_cards.py     # 리스크 카드 DB 적재
+│   │   ├── db_insert_countries.py    # 국가 초기 데이터 삽입
+│   │   ├── db_check_connection.py    # DB 연결 확인
+│   │   └── risk_generate_cards.py    # 리스크 카드 생성 (LLM 호출)
 │   └── main.py               # FastAPI 앱 진입점
 ├── data/                     # 크롤링/임베딩 데이터 (.jsonl)
 ├── keys/                     # GCP 인증키 (Git 미포함)
@@ -85,6 +86,21 @@ GLAW/AI/
 ```
 
 ## ⚙️ 설치 및 실행
+
+## 🧭 스크립트 네이밍 규칙
+
+별도 규칙 문서 대신, 현재 프로젝트는 아래 규칙을 `src/scripts`에 공통 적용합니다.
+
+- 기본 형식: `<prefix>_<action>_<target>.py`
+- `prefix`:
+   - `chat`: 챗봇(Q&A) 관련 배치/유틸
+   - `compare`: 비교 분석 관련 배치/유틸
+   - `risk`: 리스크 카드 관련 배치/유틸
+   - `ragas`: RAGAS 데이터셋 생성/평가 스크립트
+   - `data`: 수집/가공/임베딩/평가 등 데이터 작업
+   - `db`: 테이블 생성/검증/적재 등 DB 작업
+- `action`은 `crawl`, `process`, `generate`, `load`, `check`, `evaluate`, `insert`, `create` 등으로 통일
+- 지역/출처 식별자는 마지막에 배치 (`us_ca`, `au`, `ko` 등)
 
 ### 1. 가상환경 설정
 ```bash
@@ -124,16 +140,16 @@ uvicorn src.main:app --reload
 법률 데이터의 수집부터 검색까지의 흐름:
 
 ```
-1. 크롤링 (crawl_us_ca.py)
+1. 크롤링 (data_crawl_us_ca.py)
    → 법률 원문 수집
 
-2. 가공 (process_us_ca.py)
+2. 가공 (data_process_us_ca.py)
    → 조항 단위로 분리, 정제
 
-3. 임베딩 (embed_to_file.py)
+3. 임베딩 (data_embed_to_file.py)
    → Vertex AI로 텍스트 → 벡터 변환
 
-4. DB 적재 (load_to_db.py)
+4. DB 적재 (db_load_law_data.py)
    → PostgreSQL + pgvector에 저장
 
 5. 검색 (chat_service.py)

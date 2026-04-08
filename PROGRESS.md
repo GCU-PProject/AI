@@ -71,7 +71,7 @@ GLAW(Global Law) AI는 전 세계 법률 정보를 AI로 검색하고 비교할 
 [크롤링] → [가공] → [임베딩] → [DB 적재]
 ```
 
-### 3.1 크롤링 및 가공 (`crawl_us_ca.py`)
+### 3.1 크롤링 및 가공 (`data_crawl_us_ca.py`)
 
 캘리포니아 주 공식 법률 사이트에서 법령 원문을 수집하고, RAG에 적합한 형태로 가공하였다.
 
@@ -81,7 +81,7 @@ GLAW(Global Law) AI는 전 세계 법률 정보를 AI로 검색하고 비교할 
 - 메타데이터 추출: 법률 종류(`law_type`), 목차(`section_title`), 조항 번호(`article_no`), 본문(`content`), 출처 URL(`source_url`)
 - 출력: `.jsonl` 형식의 정제된 데이터 파일
 
-### 3.2 임베딩 생성 (`embed_to_file.py`)
+### 3.2 임베딩 생성 (`data_embed_to_file.py`)
 
 정제된 법률 텍스트를 벡터(숫자 배열)로 변환하였다.
 
@@ -91,7 +91,7 @@ GLAW(Global Law) AI는 전 세계 법률 정보를 AI로 검색하고 비교할 
 - Vertex AI의 API 호출 제한(Rate Limit)을 고려하여 배치 처리 및 대기 시간 적용
 - 출력: 임베딩 벡터가 포함된 `.jsonl` 파일
 
-### 3.3 DB 적재 (`load_to_db.py`)
+### 3.3 DB 적재 (`db_load_law_data.py`)
 
 생성된 임베딩 데이터를 PostgreSQL 데이터베이스에 저장하였다.
 
@@ -305,14 +305,21 @@ src/
 │   ├── risk_card_topics.yaml  # 리스크 주제 생성 (스크립트용)
 │   └── risk_card_content.yaml # 리스크 본문 생성 (스크립트용)
 ├── scripts/                   # 유틸리티 스크립트
-│   ├── crawl_us_ca.py         # 캘리포니아 법률 크롤링 및 가공
-│   ├── embed_to_file.py       # 임베딩 생성
-│   ├── load_to_db.py          # DB 적재
-│   ├── generate_risk_cards.py # 리스크 카드 생성 (LLM 호출)
-│   ├── load_risk_cards.py     # 리스크 카드 DB 적재
-│   ├── check_distance.py      # 벡터 거리 테스트
-│   ├── evaluate_rag.py        # RAG 성능 평가
-│   └── generate_dataset.py    # RAGAS 평가 데이터셋 생성
+│   ├── data_crawl_us_ca.py      # 캘리포니아 법률 크롤링 및 가공
+│   ├── data_process_us_ca.py    # 크롤링 데이터 가공
+│   ├── data_process_au.py       # 호주 데이터 가공
+│   ├── data_process_ko.py       # 한국 데이터 가공
+│   ├── data_embed_to_file.py    # 임베딩 생성
+│   ├── data_check_distance.py   # 벡터 거리 테스트
+│   ├── data_check_models.py     # GCP 모델 연결 테스트
+│   ├── ragas_evaluate_rag.py    # RAG 성능 평가
+│   ├── ragas_generate_dataset.py # RAGAS 평가 데이터셋 생성
+│   ├── db_load_law_data.py      # DB 적재
+│   ├── db_insert_countries.py   # 국가 초기 데이터 삽입
+│   ├── db_check_connection.py   # DB 연결 확인
+│   ├── db_create_risk_tables.py # 리스크 테이블 생성
+│   ├── db_load_risk_cards.py    # 리스크 카드 DB 적재
+│   └── risk_generate_cards.py   # 리스크 카드 생성 (LLM 호출)
 └── main.py                    # FastAPI 앱 진입점
 ```
 
@@ -814,7 +821,7 @@ async def chat_stream_endpoint(request, db):
 **목표**: 향후 Reranker 도입이나 Hybrid Search 적용 시 검색 품질 변화를 정량적으로 측정하기 위한 자동화된 테스트 베드를 구축한다.
 
 **구현 내용**:
-- `src/scripts/generate_dataset.py` 파이프라인을 구축하여, DB에 적재된 법률 조항(Chunk)을 기반으로 RAG 모델 평가용 합성 데이터셋(Synthetic Dataset)을 일관성 있게 자동 생성한다.
+- `src/scripts/ragas_generate_dataset.py` 파이프라인을 구축하여, DB에 적재된 법률 조항(Chunk)을 기반으로 RAG 모델 평가용 합성 데이터셋(Synthetic Dataset)을 일관성 있게 자동 생성한다.
 - 최신 **RAGAS 0.4.x API**의 `KnowledgeGraph`와 `Synthesizers` 아키텍처를 도입하여, 단순 검색용 1차원적 문맥 질문(SingleHop)뿐만 아니라 복잡한 추론 질문(MultiHop)까지 다양한 난이도가 포함된 현실적인 평가 데이터셋을 확보할 수 있게 되었다.
 
 ---
