@@ -90,7 +90,7 @@ class Settings(BaseSettings):
         """
         크롤러 스크립트용 DB 접속 파라미터 (딕셔너리 형태)
 
-        사용처: crawl_us_ca.py, load_to_db.py 등
+        사용처: data_crawl_us_ca.py, db_load_law_data.py 등
         psycopg2.connect(**settings.CRAWLER_DB_PARAMS) 형태로 사용
         """
         return {

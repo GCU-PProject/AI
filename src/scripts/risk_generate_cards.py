@@ -1,9 +1,9 @@
-# src/scripts/generate_risk_cards.py
+# src/scripts/risk_generate_cards.py
 """
 리스크 카드 배치 생성 스크립트
 
 2단계 LLM 파이프라인으로 리스크 카드를 생성하고 JSON 파일로 저장합니다.
-DB 적재는 load_risk_cards.py에서 별도로 수행합니다.
+DB 적재는 db_load_risk_cards.py에서 별도로 수행합니다.
 
 [전체 흐름]
 1. 입력 조합 생성 (국가 × 체류목적 × 비자유형 × 연령대)
@@ -12,9 +12,9 @@ DB 적재는 load_risk_cards.py에서 별도로 수행합니다.
 4. 검증 + data/risk_cards.json 저장
 
 [실행 방법]
-python -m src.scripts.generate_risk_cards                    # 전체 실행
-python -m src.scripts.generate_risk_cards --country-id 1     # 특정 국가만
-python -m src.scripts.generate_risk_cards --dry-run           # STEP 1만 확인
+python -m src.scripts.risk_generate_cards                    # 전체 실행
+python -m src.scripts.risk_generate_cards --country-id 1     # 특정 국가만
+python -m src.scripts.risk_generate_cards --dry-run           # STEP 1만 확인
 """
 
 import asyncio

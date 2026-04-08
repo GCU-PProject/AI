@@ -1,12 +1,12 @@
-# src/scripts/load_risk_cards.py
+# src/scripts/db_load_risk_cards.py
 """
 리스크 카드 DB 적재 스크립트
 
-generate_risk_cards.py로 생성된 data/risk_cards.json을 읽어서
+risk_generate_cards.py로 생성된 data/risk_cards.json을 읽어서
 risk / risk_list 테이블에 upsert합니다.
 
 [실행 방법]
-python -m src.scripts.load_risk_cards
+python -m src.scripts.db_load_risk_cards
 
 [Upsert 전략]
 - 동일한 조합(country_id, travel_purpose, visa_type, age_band)이 이미 있으면:

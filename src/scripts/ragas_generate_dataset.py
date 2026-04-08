@@ -1,4 +1,4 @@
-# src/scripts/generate_dataset.py
+# src/scripts/ragas_generate_dataset.py
 """
 [RAGAS 데이터셋 생성 스크립트]
 

@@ -1,4 +1,4 @@
-# src/scripts/check_distance.py
+# src/scripts/data_check_distance.py
 
 import asyncio
 import os

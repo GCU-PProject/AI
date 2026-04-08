@@ -1,4 +1,4 @@
-# src/scripts/evaluate_rag.py
+# src/scripts/ragas_evaluate_rag.py
 """
 [RAGAS 평가 스크립트]
 
@@ -7,8 +7,8 @@
 Ragas 0.4.x 프레임워크로 자동 채점하여 시스템 성능을 측정합니다.
 
 [사용법]
-    python src/scripts/evaluate_rag.py --name baseline
-    python src/scripts/evaluate_rag.py --name add_reranker
+    python src/scripts/ragas_evaluate_rag.py --name baseline
+    python src/scripts/ragas_evaluate_rag.py --name add_reranker
 
 [결과 저장 구조]
     data/eval_results/
