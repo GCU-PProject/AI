@@ -62,7 +62,7 @@ EVAL_RESULTS_DIR = "data/eval_results"
 EVAL_HISTORY_PATH = os.path.join(EVAL_RESULTS_DIR, "eval_history.csv")
 
 # chat_service.py와 동일한 검색 파라미터
-TOP_K = 5
+TOP_K = 3
 MAX_DISTANCE_THRESHOLD = 0.90
 
 # =========================================================
@@ -196,7 +196,10 @@ async def generate_rag_answer(query: str, db) -> tuple[str, list[str]]:
 
     # Step 3: 검색 결과 없으면 기본 답변
     if not docs:
-        return "죄송합니다. 질문하신 내용과 관련된 정확한 법률 정보를 찾을 수 없습니다.", []
+        return (
+            "죄송합니다. 질문하신 내용과 관련된 정확한 법률 정보를 찾을 수 없습니다.",
+            [],
+        )
 
     # Step 4: 답변 생성
     context = format_docs(docs)
@@ -304,7 +307,12 @@ async def run_evaluation(experiment_name: str):
 
     # 4-2. 이력 로그 CSV에 한 줄 추가
     # result_df에서 점수 컬럼의 평균을 바로 계산 (가장 단순하고 안전한 방법)
-    metric_cols = ["answer_correctness", "answer_relevancy", "context_precision", "context_recall"]
+    metric_cols = [
+        "answer_correctness",
+        "answer_relevancy",
+        "context_precision",
+        "context_recall",
+    ]
     means = result_df[metric_cols].mean()
 
     avg_scores = {
@@ -329,7 +337,9 @@ async def run_evaluation(experiment_name: str):
     print("\n" + "=" * 60)
     print(f"🎉 평가 완료! 실험명: {experiment_name}")
     print("=" * 60)
-    for col_name, label in zip(metric_cols, ["정답 일치도", "답변 관련성", "검색 정밀도", "검색 재현율"]):
+    for col_name, label in zip(
+        metric_cols, ["정답 일치도", "답변 관련성", "검색 정밀도", "검색 재현율"]
+    ):
         print(f"   📌 {label}: {round(means[col_name], 4)}")
     print("=" * 60)
 
