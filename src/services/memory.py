@@ -145,8 +145,8 @@ async def contextualize_question(query: str, session_id: Optional[str], llm) -> 
     # LCEL 체인: 프롬프트 → LLM → 텍스트 추출
     chain = CONTEXTUALIZE_PROMPT | llm | StrOutputParser()
 
-    # 최근 MEMORY_WINDOW_SIZE쌍만 사용 (슬라이딩 윈도우)
-    recent_messages = history.messages[-(MEMORY_WINDOW_SIZE * 2) :]
+    # 저장 시점에 이미 MEMORY_WINDOW_SIZE 만큼 잘려있으므로 전체를 그대로 전달합니다.
+    recent_messages = history.messages
 
     contextualized = await chain.ainvoke(
         {
@@ -188,6 +188,14 @@ def save_to_history(session_id: Optional[str], query: str, answer: str) -> None:
     history = get_chat_history(session_id)
     history.add_user_message(query)
     history.add_ai_message(answer)
+    
+    # [메모리 누수 방지]
+    # 사용자가 수백 번 질문하면 상자(RAM)가 무한히 커지는 것을 방지하기 위해
+    # 오래된 대화 기록은 잘라내고 최근 기록(MEMORY_WINDOW_SIZE * 2)만 유지합니다.
+    max_messages = MEMORY_WINDOW_SIZE * 2
+    if len(history.messages) > max_messages:
+        history.messages = history.messages[-max_messages:]
+        
     print(
-        f"💾 대화 기록 저장 (session: {session_id}, 총 {len(history.messages)}개 메시지)"
+        f"💾 대화 기록 저장 (session: {session_id}, 총 {len(history.messages)}개 메시지 유지)"
     )
