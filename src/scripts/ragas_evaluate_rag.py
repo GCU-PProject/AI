@@ -62,8 +62,8 @@ EVAL_RESULTS_DIR = "data/eval_results"
 EVAL_HISTORY_PATH = os.path.join(EVAL_RESULTS_DIR, "eval_history.csv")
 
 # chat_service.py와 동일한 검색 파라미터
-TOP_K = 3
-MAX_DISTANCE_THRESHOLD = 0.90
+TOP_K = settings.RAG_TOP_K
+MAX_DISTANCE_THRESHOLD = settings.RAG_MAX_DISTANCE_THRESHOLD
 
 # =========================================================
 # 2. AI 모델 초기화 (chat_service.py와 동일)

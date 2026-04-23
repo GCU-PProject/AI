@@ -53,6 +53,12 @@ class Settings(BaseSettings):
     CORS_ALLOW_ORIGINS: str = ""
 
     # =============================================
+    # RAG 검색 설정
+    # =============================================
+    RAG_TOP_K: int = 7
+    RAG_MAX_DISTANCE_THRESHOLD: float = 0.90
+
+    # =============================================
     # DB 접속 URL 생성 (property)
     # =============================================
     # @property: 메서드를 속성처럼 사용할 수 있게 해줍니다.
@@ -138,4 +144,6 @@ settings = Settings()
 # Google Cloud SDK 인증을 위해 환경변수에 명시적으로 등록합니다.
 # pydantic-settings는 객체에만 값을 저장할뿐 os.environ에 주입하지 않기 때문입니다.
 if settings.GOOGLE_APPLICATION_CREDENTIALS:
-    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = settings.GOOGLE_APPLICATION_CREDENTIALS
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = (
+        settings.GOOGLE_APPLICATION_CREDENTIALS
+    )
