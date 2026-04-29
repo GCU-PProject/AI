@@ -4,6 +4,13 @@ import os
 import sys
 import glob
 
+# Windows CP949 encoding issue fix for emojis
+if sys.platform == "win32" and sys.stdout.encoding.lower() != "utf-8":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except AttributeError:
+        pass
+
 # ------------------------------------------------------------------------------
 # 1. 모듈 경로 설정
 # ------------------------------------------------------------------------------
@@ -24,13 +31,26 @@ if settings.GOOGLE_APPLICATION_CREDENTIALS:
     )
 
 
+from google.oauth2 import service_account
+
 async def step1_embed_to_file():
     # --------------------------------------------------
     # 3. 초기화 (Vertex AI Only) - DB 연결 제거됨
     # --------------------------------------------------
     print(f"🔧 설정 로드 완료: Project={settings.GCP_PROJECT_ID}")
     print("🔄 GCP Vertex AI 초기화 중...")
-    vertexai.init(project=settings.GCP_PROJECT_ID, location=settings.GCP_LOCATION)
+    
+    credentials = None
+    if settings.GOOGLE_APPLICATION_CREDENTIALS:
+        credentials = service_account.Credentials.from_service_account_file(
+            settings.GOOGLE_APPLICATION_CREDENTIALS
+        )
+        
+    vertexai.init(
+        project=settings.GCP_PROJECT_ID, 
+        location=settings.GCP_LOCATION,
+        credentials=credentials
+    )
     embedding_model = TextEmbeddingModel.from_pretrained("text-embedding-005")
 
     # --------------------------------------------------
@@ -39,7 +59,7 @@ async def step1_embed_to_file():
     # files = glob.glob("law_data_VEH.jsonl")
     # 원상복귀: 위 주석을 풀고 아래 리스트를 주석 처리하세요.
     files = [
-        "law_data_AU.jsonl",
+        "law_data_KO.jsonl",
     ]
 
     # 파일 존재 여부 확인 (리스트 사용 시 glob과 달리 직접 확인 필요)
@@ -83,7 +103,7 @@ async def step1_embed_to_file():
                 batch_data.append(text_for_embedding)
 
                 # (B) 객체 보관 (DB 객체 생성 대신 딕셔너리 그대로 사용)
-                # 나중에 DB에 넣을 때 매핑할 정보들을 그대로 가져갑니다.
+                # 나중에 DB에 넣을 때 매핑할 정보들을 그대로 가져갑다.
                 batch_objects.append(row)
 
                 # (C) 배치 처리
@@ -110,7 +130,7 @@ async def step1_embed_to_file():
                     batch_objects,
                     f_out,
                     current_count,
-                    total_lines,
+                    total_lines,니
                 )
 
         print(f"✅ 파일 변환 완료: {output_filename} (총 {current_count}건)")
