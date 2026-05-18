@@ -8,3 +8,7 @@ select = ["E", "W", "F", "I", "UP"]
 
 [tool.ruff.isort]
 known_third_party = ["fastapi", "torch", "pandas", "numpy"]
+
+[tool.pyright]
+include = ["src"]
+extraPaths = ["."]
