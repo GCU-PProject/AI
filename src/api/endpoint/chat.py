@@ -39,6 +39,7 @@ async def chat_endpoint(request: ChatRequest, db: AsyncSession = Depends(get_db)
         )
 
         if not country.scalar():
+            logger.warning("존재하지 않는 국가 ID입니다: %s", request.country_id)
             return error_response(
                 status=404,
                 code="AI_COUNTRY_NOT_FOUND",
@@ -62,7 +63,8 @@ async def chat_endpoint(request: ChatRequest, db: AsyncSession = Depends(get_db)
             result=chat_result,
         )
 
-    except (ConnectionError, SQLAlchemyError):
+    except (ConnectionError, SQLAlchemyError) as e:
+        logger.error(f"데이터베이스 오류: {str(e)}")
         return error_response(
             status=503,
             code="AI_DB_CONNECTION_FAILED",
@@ -70,6 +72,7 @@ async def chat_endpoint(request: ChatRequest, db: AsyncSession = Depends(get_db)
         )
 
     except ValueError as e:
+        logger.error(f"검색/번역 실패: {str(e)}")
         return error_response(
             status=400,
             code="AI_RETRIEVAL_FAILED",

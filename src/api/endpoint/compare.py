@@ -81,5 +81,5 @@ async def compare_endpoint(request: CompareRequest, db: AsyncSession = Depends(g
         return error_response(
             status=500,
             code="AI_COMPARE_ANALYSIS_FAILED",
-            message=f"비교 분석 중 오류 발생: {str(e)}",
+            message=f"비교 분석 중 오류 발생",
         )

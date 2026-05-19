@@ -144,17 +144,12 @@ async def translate_query(query: str) -> str:
         이 파이프라인은 | (파이프) 연산자로 각 단계를 연결합니다.
         데이터가 왼쪽에서 오른쪽으로 순차적으로 흐릅니다.
     """
-    try:
-        chain = TRANSLATION_PROMPT | llm | StrOutputParser()
-        translated = await chain.ainvoke({"query": query})
-        if not translated or not translated.strip():
-            raise ValueError("번역 결과가 없습니다.")
-        print(f"🔄 번역: '{query}' → '{translated}'")
-        return translated
-    except Exception as e:
-        print(f"번역 실패: {str(e)}")
-        raise
-
+    chain = TRANSLATION_PROMPT | llm | StrOutputParser()
+    translated = await chain.ainvoke({"query": query})
+    if not translated or not translated.strip():
+        raise ValueError("번역 결과가 없습니다.")
+    logger.info("번역 완료: '%s' → '%s'", query, translated)
+    return translated
 
 # =========================================================
 # 4. RAG 프롬프트 템플릿 (답변 생성용)
