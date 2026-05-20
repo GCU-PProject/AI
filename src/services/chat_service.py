@@ -18,18 +18,18 @@ LCEL(LangChain Expression Language) 파이프라인으로 연결합니다.
     → 6단계: API 응답 반환
 """
 import logging
-from typing import Dict, Any, List, Optional
-from src.core.llm import get_llm, embeddings
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.documents import Document
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from langchain_core.prompts import load_prompt
-from src.core.models import Law
-from src.core.config import settings
-from src.services.memory import contextualize_question, save_to_history
+from typing import Any, Dict, List, Optional
 
+from langchain_core.documents import Document
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import ChatPromptTemplate, load_prompt
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.core.config import settings
+from src.core.llm import embeddings, get_llm
+from src.core.models import Law
+from src.services.memory import contextualize_question, save_to_history
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +116,7 @@ async def translate_query(query: str) -> str:
         raise ValueError("번역 결과가 없습니다.")
     logger.info("번역 완료: '%s' → '%s'", query, translated)
     return translated
+
 
 # =========================================================
 # 4. RAG 프롬프트 템플릿 (답변 생성용)

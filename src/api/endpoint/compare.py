@@ -26,13 +26,6 @@ async def compare_endpoint(request: CompareRequest, db: AsyncSession = Depends(g
     기능: 질문 영어 번역, JsonOutputParser 자동 파싱
     """
 
-    if request.country_id_1 == request.country_id_2:
-        return error_response(
-            status=400,
-            code="AI_COMPARE_SAME_COUNTRY",
-            message="요청 처리 중 오류 : 두 국가 ID가 같습니다.",
-        )
-
     try:
         country_results = await db.execute(
             select(Country).where(

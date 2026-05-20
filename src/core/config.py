@@ -22,6 +22,7 @@ pydantic-settings의 BaseSettings를 상속하면:
 from src.core.config import settings
 print(settings.DB_HOST)  # .env의 DB_HOST 값 출력
 """
+import os
 
 from pydantic_settings import BaseSettings
 
@@ -134,8 +135,6 @@ class Settings(BaseSettings):
         env_file_encoding = "utf-8"  # 파일 인코딩
         extra = "ignore"  # .env에 Settings에 정의되지 않은 변수가 있어도 무시
 
-
-import os
 
 # 설정 인스턴스 생성 (모듈 로드 시 1회 실행)
 # 다른 파일에서 from src.core.config import settings 로 가져다 씁니다.

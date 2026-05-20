@@ -34,10 +34,10 @@ RAG 시스템은 기본적으로 각 질문을 독립적으로 처리합니다.
 
 import logging
 from typing import Dict, Optional
-from langchain_core.prompts import load_prompt
+
 from langchain_community.chat_message_histories import ChatMessageHistory
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder, load_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -160,7 +160,9 @@ async def contextualize_question(query: str, session_id: Optional[str], llm) -> 
     # 안전장치: 재구성 결과가 비어있으면 원본 질문을 그대로 사용
     # (토큰 제한 등으로 LLM이 빈 문자열을 반환하는 경우 방지)
     if not contextualized or not contextualized.strip():
-        logger.warning("⚠️ 질문 재구성 결과가 비어있어 원본 질문을 사용합니다: '%s'", query)
+        logger.warning(
+            "⚠️ 질문 재구성 결과가 비어있어 원본 질문을 사용합니다: '%s'", query
+        )
         return query
 
     logger.info("💬 질문 재구성: '%s' → '%s'", query, contextualized)
@@ -190,7 +192,7 @@ def save_to_history(session_id: Optional[str], query: str, answer: str) -> None:
     history = get_chat_history(session_id)
     history.add_user_message(query)
     history.add_ai_message(answer)
-    
+
     # [메모리 누수 방지]
     # 사용자가 수백 번 질문하면 상자(RAM)가 무한히 커지는 것을 방지하기 위해
     # 오래된 대화 기록은 잘라내고 최근 기록(MEMORY_WINDOW_SIZE * 2)만 유지합니다.
@@ -198,4 +200,8 @@ def save_to_history(session_id: Optional[str], query: str, answer: str) -> None:
     if len(history.messages) > max_messages:
         history.messages = history.messages[-max_messages:]
 
-    logger.info("💾 대화 기록 저장 (session: %s, 총 %s개 메시지 유지)", session_id, len(history.messages))    
+    logger.info(
+        "💾 대화 기록 저장 (session: %s, 총 %s개 메시지 유지)",
+        session_id,
+        len(history.messages),
+    )

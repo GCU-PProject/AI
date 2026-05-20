@@ -38,17 +38,17 @@ JSON 형식의 비교 결과를 반환합니다.
     → 7단계: API 응답 형식으로 조립하여 반환
 """
 
-import json
 import logging
-from typing import Dict, Any
-from src.core.llm import get_llm
-from langchain_core.prompts import ChatPromptTemplate
+from typing import Any, Dict
+
 from langchain_core.output_parsers import JsonOutputParser
-from langchain_core.prompts import load_prompt
-from sqlalchemy.ext.asyncio import AsyncSession
+from langchain_core.prompts import ChatPromptTemplate, load_prompt
 from sqlalchemy import select
-from src.core.models import Country
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from src.core.config import settings
+from src.core.llm import get_llm
+from src.core.models import Country
 
 logger = logging.getLogger(__name__)
 
@@ -59,13 +59,13 @@ logger = logging.getLogger(__name__)
 # import하여 재사용합니다. 이렇게 하면:
 # 1. 코드 중복을 방지 (DRY 원칙: Don't Repeat Yourself)
 # 2. 검색/번역 로직 수정 시 chat_service.py만 변경하면 됨
+from src.services.chat_service import MAX_DISTANCE_THRESHOLD  # L2 거리 임계값 (0.85)
+from src.services.chat_service import TOP_K  # 검색 시 가져올 최대 문서 수 (5)
+from src.services.chat_service import retrieve_laws  # 벡터 유사도 기반 법률 검색 함수
+from src.services.chat_service import translate_query  # 한국어 → 영어 번역 함수
 from src.services.chat_service import (
-    retrieve_laws,  # 벡터 유사도 기반 법률 검색 함수
-    format_docs,  # Document 리스트 → 프롬프트 텍스트 변환 함수
-    translate_query,  # 한국어 → 영어 번역 함수
-    TOP_K,  # 검색 시 가져올 최대 문서 수 (5)
-    MAX_DISTANCE_THRESHOLD,  # L2 거리 임계값 (0.85)
-)
+    format_docs,
+)  # Document 리스트 → 프롬프트 텍스트 변환 함수
 
 # =========================================================
 # 2. AI 모델 초기화
@@ -193,8 +193,13 @@ async def compare_laws(
     # 예: "United States (California)의 관련 법률 데이터를 찾을 수 없습니다."
     if not docs_1 and not docs_2:
 
+        logger.warning(
+            "두 국가 모두 관련 법률 검색 실패: query='%s' (country_id_1=%s, country_id_2=%s)",
+            query,
+            country_id_1,
+            country_id_2,
+        )
         return {
-            "search_success": False,
             "country_1_result": {"related_law_ids": [], "summary": "자료 없음"},
             "country_2_result": {"related_law_ids": [], "summary": "자료 없음"},
             "compare_summary": {
@@ -206,6 +211,11 @@ async def compare_laws(
     if not docs_1:
         country_1_name = country_map.get(country_id_1, str(country_id_1))
         context_1_text = f"{country_1_name}의 관련 법률 데이터를 찾을 수 없습니다."
+        logger.info(
+            "비교 대상 국가 중 일부 법률 데이터 부재: 국가=%s, 질문='%s'",
+            country_1_name,
+            query,
+        )
 
     else:
         context_1_text = format_docs(docs_1)
@@ -213,6 +223,11 @@ async def compare_laws(
     if not docs_2:
         country_2_name = country_map.get(country_id_2, str(country_id_2))
         context_2_text = f"{country_2_name}의 관련 법률 데이터를 찾을 수 없습니다."
+        logger.info(
+            "비교 대상 국가 중 일부 법률 데이터 부재: 국가=%s, 질문='%s'",
+            country_2_name,
+            query,
+        )
 
     else:
         context_2_text = format_docs(docs_2)
@@ -272,7 +287,6 @@ async def compare_laws(
     # analysis.get("key", ""): 키가 없을 경우 빈 문자열을 기본값으로 사용
     # (LLM이 일부 키를 누락할 가능성에 대한 안전장치)
     return {
-        "search_success": True,
         "country_1_result": {
             "related_law_ids": ids_1,
             "summary": analysis.get("summary_1", ""),
