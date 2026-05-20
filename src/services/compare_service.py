@@ -40,7 +40,7 @@ JSON 형식의 비교 결과를 반환합니다.
 
 import json
 from typing import Dict, Any
-from langchain_google_vertexai import ChatVertexAI
+from src.core.llm import get_llm
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.prompts import load_prompt
@@ -65,25 +65,13 @@ from src.services.chat_service import (
 )
 
 # =========================================================
-# 1. LLM 초기화 (비교 전용)
+# 2. AI 모델 초기화
 # =========================================================
-# chat_service의 LLM과 별도로 초기화하는 이유:
-# - max_output_tokens를 2048로 늘림 (비교 분석은 두 국가를 다루므로 답변이 더 깁니다)
-# - chat_service는 1024 (단일 국가 Q&A용)
-#
-# [파라미터 설명]
-# - temperature=0: 무작위성 최소화 → 일관된 법률 분석 결과 보장
-# - max_output_tokens=2048: chat_service(1024)의 2배
-#   두 국가의 요약(각 3~5문장) + 공통점 + 차이점을 모두 포함해야 하므로
-#   더 긴 출력이 필요합니다.
-# - top_k, top_p 미설정: temperature=0이면 영향이 미미하므로 생략
-llm = ChatVertexAI(
-    model_name=settings.GCP_MODEL_NAME,
-    project=settings.GCP_PROJECT_ID,
-    location=settings.GCP_LOCATION,
-    temperature=0,
-    max_output_tokens=2048,
-)
+# 이 모듈이 import될 때 한 번만 실행됩니다.
+# LangChain에서는 객체를 모듈 로드 시 한 번만 생성하면
+# 이후 모든 요청에서 재사용됩니다.
+
+llm = get_llm()
 
 # =========================================================
 # 2. 비교 분석용 프롬프트 템플릿
