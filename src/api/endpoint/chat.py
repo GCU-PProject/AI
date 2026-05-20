@@ -9,6 +9,7 @@ POST /api/qna → 법률 Q&A (services/chat_service 호출)
 """
 
 import logging
+import time
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
@@ -48,11 +49,20 @@ async def chat_endpoint(request: ChatRequest, db: AsyncSession = Depends(get_db)
                 message=f"존재하지 않는 국가 ID입니다: {request.country_id}",
             )
 
+        start_time = time.perf_counter()
+
         result_data = await generate_answer(
             query=request.query,
             db=db,
             country_id=request.country_id,
             session_id=request.session_id,
+        )
+
+        elapsed_time = round(time.perf_counter() - start_time, 2)
+        logger.info(
+            "⏱️ [Q&A Latency] 질문: '%s' | 답변 생성 시간: %s초 소요",
+            request.query,
+            elapsed_time,
         )
 
         chat_result = ChatResult(**result_data)
