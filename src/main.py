@@ -28,6 +28,7 @@ from dotenv import load_dotenv
 # ※ 반드시 다른 모듈을 import하기 전에 호출해야 합니다!
 load_dotenv()
 
+import logging
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, Request
@@ -37,6 +38,8 @@ from fastapi.responses import JSONResponse
 
 from src.api.endpoint import chat, compare, risk
 from src.core.config import settings
+
+logging.basicConfig(level=logging.INFO)
 
 # FastAPI 앱 생성
 # - title: Swagger 문서(/docs)에 표시되는 API 이름
