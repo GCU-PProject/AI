@@ -1,28 +1,20 @@
 import logging
+
 from fastapi import APIRouter, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.api.utils import error_response
 from src.core.database import get_db
+from src.core.models import Country
 from src.schemas.common import CommonResponse
 from src.schemas.compare import CompareRequest, CompareResult
-from src.core.models import Country
 from src.services.compare_service import compare_laws
-from fastapi.responses import JSONResponse
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
-
-
-def _error_response(status: int, code: str, message: str) -> JSONResponse:
-    payload = CommonResponse(
-        success=False,
-        status=status,
-        code=code,
-        message=message,
-        result=None,
-    )
-    return JSONResponse(status_code=status, content=payload.model_dump())
 
 
 @router.post("/compare", response_model=CommonResponse)
@@ -33,13 +25,6 @@ async def compare_endpoint(request: CompareRequest, db: AsyncSession = Depends(g
     LangChain 기반 서비스를 호출합니다.
     기능: 질문 영어 번역, JsonOutputParser 자동 파싱
     """
-
-    if request.country_id_1 == request.country_id_2:
-        return _error_response(
-            status=400,
-            code="AI_COMPARE_SAME_COUNTRY",
-            message="요청 처리 중 오류 : 두 국가 ID가 같습니다.",
-        )
 
     try:
         country_results = await db.execute(
@@ -57,7 +42,7 @@ async def compare_endpoint(request: CompareRequest, db: AsyncSession = Depends(g
             if request.country_id_2 not in country_list:
                 missing.append(request.country_id_2)
 
-            return _error_response(
+            return error_response(
                 status=404,
                 code="AI_COMPARE_COUNTRY_NOT_FOUND",
                 message=f"존재하지 않는 국가 ID입니다: {missing}",
@@ -81,7 +66,7 @@ async def compare_endpoint(request: CompareRequest, db: AsyncSession = Depends(g
         )
 
     except (ConnectionError, SQLAlchemyError):
-        return _error_response(
+        return error_response(
             status=503,
             code="AI_DB_CONNECTION_FAILED",
             message="데이터베이스 연결에 실패했습니다.",
@@ -89,8 +74,8 @@ async def compare_endpoint(request: CompareRequest, db: AsyncSession = Depends(g
 
     except Exception as e:
         logger.exception(f"비교 분석 중 오류 발생: {str(e)}")
-        return _error_response(
+        return error_response(
             status=500,
             code="AI_COMPARE_ANALYSIS_FAILED",
-            message=f"비교 분석 중 오류 발생: {str(e)}",
+            message=f"비교 분석 중 오류 발생",
         )

@@ -28,15 +28,18 @@ from dotenv import load_dotenv
 # ※ 반드시 다른 모듈을 import하기 전에 호출해야 합니다!
 load_dotenv()
 
+import logging
+from datetime import datetime, timezone
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from datetime import datetime, timezone
+from fastapi.responses import JSONResponse
+
+from src.api.endpoint import chat, compare, risk
 from src.core.config import settings
-from src.api.endpoint import chat as chat  # 챗봇 API 라우터
-from src.api.endpoint import compare as compare  # 비교 API 라우터
-from src.api.endpoint import risk as risk  # 리스크 API 라우터
+
+logging.basicConfig(level=logging.INFO)
 
 # FastAPI 앱 생성
 # - title: Swagger 문서(/docs)에 표시되는 API 이름
