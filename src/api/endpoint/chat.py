@@ -9,21 +9,23 @@ POST /api/qna → 법률 Q&A (services/chat_service 호출)
 """
 
 import logging
+
 from fastapi import APIRouter, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from src.api.utils import error_response
 from src.core.database import get_db
-from src.schemas.common import CommonResponse
-from src.schemas.chat import ChatRequest, ChatResult
 from src.core.models import Country
+from src.schemas.chat import ChatRequest, ChatResult
+from src.schemas.common import CommonResponse
 from src.services.chat_service import generate_answer
-from fastapi.responses import JSONResponse
-
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
 
 @router.post("/qna", response_model=CommonResponse)
 async def chat_endpoint(request: ChatRequest, db: AsyncSession = Depends(get_db)):

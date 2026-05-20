@@ -1,18 +1,21 @@
 import logging
+
 from fastapi import APIRouter, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from src.api.utils import error_response
 from src.core.database import get_db
+from src.core.models import Country
 from src.schemas.common import CommonResponse
 from src.schemas.compare import CompareRequest, CompareResult
-from src.core.models import Country
 from src.services.compare_service import compare_laws
-from fastapi.responses import JSONResponse
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
 
 @router.post("/compare", response_model=CommonResponse)
 async def compare_endpoint(request: CompareRequest, db: AsyncSession = Depends(get_db)):
