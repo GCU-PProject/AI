@@ -32,12 +32,14 @@ RAG 시스템은 기본적으로 각 질문을 독립적으로 처리합니다.
 - 향후: DB(PostgreSQL)에 저장하도록 이 파일만 수정하면 됨
 """
 
+import logging
 from typing import Dict, Optional
 from langchain_core.prompts import load_prompt
 from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import StrOutputParser
 
+logger = logging.getLogger(__name__)
 
 # =========================================================
 # 1. 대화 기록 저장소
@@ -158,10 +160,10 @@ async def contextualize_question(query: str, session_id: Optional[str], llm) -> 
     # 안전장치: 재구성 결과가 비어있으면 원본 질문을 그대로 사용
     # (토큰 제한 등으로 LLM이 빈 문자열을 반환하는 경우 방지)
     if not contextualized or not contextualized.strip():
-        print(f"⚠️ 질문 재구성 결과가 비어있어 원본 질문을 사용합니다: '{query}'")
+        logger.warning("⚠️ 질문 재구성 결과가 비어있어 원본 질문을 사용합니다: '%s'", query)
         return query
 
-    print(f"💬 질문 재구성: '{query}' → '{contextualized}'")
+    logger.info("💬 질문 재구성: '%s' → '%s'", query, contextualized)
     return contextualized
 
 
@@ -195,7 +197,5 @@ def save_to_history(session_id: Optional[str], query: str, answer: str) -> None:
     max_messages = MEMORY_WINDOW_SIZE * 2
     if len(history.messages) > max_messages:
         history.messages = history.messages[-max_messages:]
-        
-    print(
-        f"💾 대화 기록 저장 (session: {session_id}, 총 {len(history.messages)}개 메시지 유지)"
-    )
+
+    logger.info("💾 대화 기록 저장 (session: %s, 총 %s개 메시지 유지)", session_id, len(history.messages))    

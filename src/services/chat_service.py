@@ -321,8 +321,7 @@ async def generate_answer(
             "search_success": True/False  # 관련 법률을 찾았는지 여부
         }
     """
-    print(f"🌍 국가 필터링 적용: ID {country_id}")
-
+    logger.info("국가 필터링 적용: ID %s", country_id)
     # ----- Step 0: 질문 재구성 (대화 맥락 반영) -----
     # session_id가 있으면 이전 대화 기록을 참고하여 후속 질문을 독립적 질문으로 재구성
     # 예: "그러면 벌금은?" → "캘리포니아 음주운전 DUI 벌금은?"
@@ -374,8 +373,7 @@ async def generate_answer(
         finish_reason = ai_response.response_metadata.get("finish_reason")
 
     # 디버깅용 로그: 응답 본문에는 노출하지 않습니다.
-    logger.info("[v2][qna] finish_reason=%s", finish_reason)
-    print(f"🧪 [v2][qna] finish_reason={finish_reason}")
+    logger.info("[qna] finish_reason=%s", finish_reason)
 
     final_answer = _extract_text_from_ai_content(ai_response.content)
 

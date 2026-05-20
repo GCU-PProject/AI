@@ -39,6 +39,7 @@ JSON 형식의 비교 결과를 반환합니다.
 """
 
 import json
+import logging
 from typing import Dict, Any
 from src.core.llm import get_llm
 from langchain_core.prompts import ChatPromptTemplate
@@ -48,6 +49,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from src.core.models import Country
 from src.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 # =========================================================
 # chat_service에서 공통 함수/설정 가져오기
@@ -254,7 +257,7 @@ async def compare_laws(
             }
         )
     except Exception as e:
-        print(f"❌ Gemini 호출/파싱 실패: {e}")
+        logger.error("❌ Gemini 호출/파싱 실패: '%s'", e)
         analysis = {
             "summary_1": "분석 실패",
             "summary_2": "분석 실패",
