@@ -59,7 +59,7 @@ def get_embeddings_qwen(texts):
         prepared_texts,
         padding=True,
         truncation=True,
-        max_length=4096,
+        max_length=2048,
         return_tensors="pt",
     ).to(device)
 
@@ -111,7 +111,7 @@ def run_embed_pipeline():
 
         print(f"📊 총 {total_lines:,}개 행 처리 예정\n")
 
-        BATCH_SIZE = 32
+        BATCH_SIZE = 8
         processed_count = 0
 
         with (
