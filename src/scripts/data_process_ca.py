@@ -13,6 +13,7 @@ import os
 import re
 import sys
 from tqdm import tqdm
+from transformers import AutoTokenizer
 
 # 1. 모듈 경로 설정
 sys.path.append(
@@ -35,6 +36,47 @@ CA_DATA_DIRS = [
     "LEGISLATION-BC",
     "REGULATIONS-BC",
 ]
+
+# 임베딩용 토큰 기준 청킹 설정
+TOKENIZER_MODEL_ID = "Qwen/Qwen3-Embedding-0.6B"
+MAX_TOKENS = 2048
+OVERLAP_TOKENS = 256
+
+_TOKENIZER = None
+
+
+def get_tokenizer():
+    global _TOKENIZER
+    if _TOKENIZER is None:
+        _TOKENIZER = AutoTokenizer.from_pretrained(TOKENIZER_MODEL_ID)
+    return _TOKENIZER
+
+
+def split_by_tokens(text, max_tokens=MAX_TOKENS, overlap=OVERLAP_TOKENS):
+    if not text:
+        return []
+    if overlap >= max_tokens:
+        overlap = max_tokens // 4
+
+    tokenizer = get_tokenizer()
+    token_ids = tokenizer(text, add_special_tokens=False)["input_ids"]
+    if len(token_ids) <= max_tokens:
+        return [text]
+
+    chunks = []
+    step = max_tokens - overlap
+    for start in range(0, len(token_ids), step):
+        end = start + max_tokens
+        chunk_ids = token_ids[start:end]
+        if not chunk_ids:
+            break
+        chunk_text = tokenizer.decode(chunk_ids, skip_special_tokens=True).strip()
+        if chunk_text:
+            chunks.append(chunk_text)
+        if end >= len(token_ids):
+            break
+
+    return chunks
 
 
 def get_section_title(unofficial_text_en: str) -> str:
@@ -112,21 +154,25 @@ def run_raw_pipeline():
                         if not body_content or not str(body_content).strip():
                             continue
 
-                        # DB 모델 컬럼명과 100% 완벽 통합된 키 이름 설정
-                        raw_data = {
-                            "country_id": country_id,
-                            "law_type": law_type,
-                            "section_title": section_title,
-                            "article_no": art_no,
-                            "content": body_content,
-                            "source_url": source_url,
-                            "enactment_date": parsed_date,
-                            "amendment_date": parsed_date
-                        }
+                        for piece in split_by_tokens(str(body_content)):
+                            if not piece.strip():
+                                continue
 
-                        f_out.write(json.dumps(raw_data, ensure_ascii=False, default=str) + "\n")
-                        dir_chunk_count += 1
-                        grand_total_chunks += 1
+                            # DB 모델 컬럼명과 100% 완벽 통합된 키 이름 설정
+                            raw_data = {
+                                "country_id": country_id,
+                                "law_type": law_type,
+                                "section_title": section_title,
+                                "article_no": art_no,
+                                "content": piece,
+                                "source_url": source_url,
+                                "enactment_date": parsed_date,
+                                "amendment_date": parsed_date
+                            }
+
+                            f_out.write(json.dumps(raw_data, ensure_ascii=False, default=str) + "\n")
+                            dir_chunk_count += 1
+                            grand_total_chunks += 1
 
                 print(f"   ✅ '{data_dir}' 처리 완료: {dir_chunk_count:,}개 조항 저장됨.\n")
 
