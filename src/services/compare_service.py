@@ -48,22 +48,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.llm import get_llm
 from src.core.models import Country
-
-logger = logging.getLogger(__name__)
-
-# =========================================================
-# chat_service에서 공통 함수/설정 가져오기
-# =========================================================
-# 검색, 포맷, 번역 로직은 chat_service.py에 이미 구현되어 있으므로
-# import하여 재사용합니다. 이렇게 하면:
-# 1. 코드 중복을 방지 (DRY 원칙: Don't Repeat Yourself)
-# 2. 검색/번역 로직 수정 시 chat_service.py만 변경하면 됨
-from src.services.chat_service import retrieve_laws  # 벡터 유사도 기반 법률 검색 함수
-from src.services.chat_service import translate_query  # 한국어 → 영어 번역 함수
 from src.services.chat_service import (
     format_docs,
+    retrieve_laws,  # 벡터 유사도 기반 법률 검색 함수
+    translate_query,  # 한국어 → 영어 번역 함수
 )  # Document 리스트 → 프롬프트 텍스트 변환 함수
 
+logger = logging.getLogger(__name__)
 # =========================================================
 # 2. AI 모델 초기화
 # =========================================================
@@ -189,7 +180,6 @@ async def compare_laws(
     # 에러 메시지에는 어떤 국가에서 데이터를 찾지 못했는지 명시합니다.
     # 예: "United States (California)의 관련 법률 데이터를 찾을 수 없습니다."
     if not docs_1 and not docs_2:
-
         logger.warning(
             "두 국가 모두 관련 법률 검색 실패: query='%s' (country_id_1=%s, country_id_2=%s)",
             query,

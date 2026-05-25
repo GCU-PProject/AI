@@ -3,20 +3,21 @@
 import asyncio
 import os
 import sys
+
 from dotenv import load_dotenv
-from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import create_async_engine
 
 # 1. 프로젝트 루트 경로 설정
 sys.path.append(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 )
 
-from src.core.models import Law
 from src.core.config import settings
+from src.core.models import Law
 
 # chat_service에서 임베딩 모델과 임계값 설정을 가져옵니다. (로직 일치 보장)
-from src.services.chat_service import embeddings, MAX_DISTANCE_THRESHOLD
+from src.services.chat_service import MAX_DISTANCE_THRESHOLD, embeddings
 
 load_dotenv()
 
@@ -77,7 +78,6 @@ async def check_distance():
         for i, row in enumerate(rows):
             law_id = row[0]
             law_type = row[1]
-            section_title = row[2] or ""
             article_no = row[3]
             # 보기 좋게 줄바꿈 제거 및 길이 제한
             raw_content = row[4] or ""
@@ -95,7 +95,7 @@ async def check_distance():
             color_end = "\033[0m"
 
             print(
-                f"{color_start}{i+1:<5} | {law_id:<6} | {distance:.5f}    | {status:<10} | [{law_type}] {article_no:<10} | {content}{color_end}"
+                f"{color_start}{i + 1:<5} | {law_id:<6} | {distance:.5f}    | {status:<10} | [{law_type}] {article_no:<10} | {content}{color_end}"
             )
 
         print("=" * 100)

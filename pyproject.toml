@@ -196,3 +196,7 @@ dependencies = [
 dev = [
     "ruff>=0.14.8",
 ]
+
+[tool.ruff.lint.per-file-ignores]
+"src/main.py" = ["E402"]
+"src/scripts/*.py" = ["E402"]
