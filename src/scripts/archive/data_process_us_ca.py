@@ -417,7 +417,7 @@ def main():
                     if count % 50 == 0: 
                         print(f"   Running... {count} (Sample Title: {rows[0]['law_title']})")
                         gc.collect() # 주기적으로 메모리 청소
-            except Exception as e:
+            except Exception:
                 # 특정 데이터가 너무 커서 에러나면 건너뛰기
                 continue
 

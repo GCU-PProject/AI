@@ -1,7 +1,6 @@
 import logging
 
 from fastapi import APIRouter, Depends
-from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -70,7 +69,7 @@ async def get_risk_endpoint(request: RiskRequest, db: AsyncSession = Depends(get
             message="법률 검색 처리 중 오류가 발생했습니다.",
         )
 
-    except Exception as e:
+    except Exception:
         logger.exception("서버 내부 오류가 발생했습니다.")
         return error_response(
             status=500,

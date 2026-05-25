@@ -132,7 +132,7 @@ def export_to_jsonl():
     print(f"   ✅ 전체 {len(corpus)}개 문서 로드 완료")
 
     # ----- Step 2: 필터링 + 조항 분리 -----
-    print(f"\n📋 [2/3] NSW 본법(Primary Legislation)만 필터링 후 조항 분리 중...")
+    print("\n📋 [2/3] NSW 본법(Primary Legislation)만 필터링 후 조항 분리 중...")
     print(f"   대상 유형: {VALID_TYPES}, 관할권: {TARGET_JURISDICTION}")
 
     output_filename = "data/law_data_AU.jsonl"

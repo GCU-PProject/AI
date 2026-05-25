@@ -97,10 +97,10 @@ def main():
     print("\n" + "=" * 70)
     print("📋 적용 필터")
     print("=" * 70)
-    print(f"  Domain     : Legal")
-    print(f"  Task Type  : Retrieval")
-    print(f"  Language   : eng")
-    print(f"  대상 태스크:")
+    print("  Domain     : Legal")
+    print("  Task Type  : Retrieval")
+    print("  Language   : eng")
+    print("  대상 태스크:")
     for t in LEGAL_RETRIEVAL_TASKS:
         print(f"    - {t}")
     print("=" * 70)
@@ -160,7 +160,7 @@ def main():
 
     # ── 6. 결과 출력 ──
     print("\n" + "=" * 70)
-    print(f"⚖️ 영어 법률(Legal) Retrieval 전수 분석 리더보드")
+    print("⚖️ 영어 법률(Legal) Retrieval 전수 분석 리더보드")
     print(f"   총 {len(ranking):,}개 모델 중 상위 {TOP_N_DISPLAY}개 표시")
     print("=" * 70)
     print(ranking.head(TOP_N_DISPLAY).to_markdown(index=False))

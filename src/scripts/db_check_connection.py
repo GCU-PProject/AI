@@ -13,7 +13,7 @@ from src.core.config import settings
 
 DATABASE_URL = settings.DATABASE_URL
 
-print(f"--- 접속 정보 확인 ---")
+print("--- 접속 정보 확인 ---")
 print(f"HOST: {settings.DB_HOST}")
 print(f"USER: {settings.DB_USER}")
 print(f"DB  : {settings.DB_NAME}")

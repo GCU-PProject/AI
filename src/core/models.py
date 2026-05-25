@@ -27,21 +27,21 @@ Country (1) ──── (N) Law
 예: California → VEH 23152, PEN 187, CIV 1750, ...
 """
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
+    JSON,
+    BigInteger,
     Column,
+    DateTime,
+    ForeignKey,
     String,
     Text,
-    JSON,
-    DateTime,
-    BigInteger,
-    func,
-    ForeignKey,
     UniqueConstraint,
+    func,
 )
 from sqlalchemy.orm import relationship
-from pgvector.sqlalchemy import Vector
-from src.core.database import Base
 
+from src.core.database import Base
 
 # =============================================
 # 운영 모델 (현재 사용 중)
@@ -64,7 +64,7 @@ class Country(Base):
     """
 
     __tablename__ = "countries"
-
+    x = 1
     # PK: 국가/지역 고유 ID (API 요청 시 country_id로 사용)
     country_id = Column(BigInteger, primary_key=True, autoincrement=True)
 

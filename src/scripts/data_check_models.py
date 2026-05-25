@@ -23,7 +23,7 @@ try:
     print(f"Testing Model: {MODEL_NAME} ...")
     res = llm.invoke("hi")
     print("SUCCESS:", res.content)
-except Exception as e:
+except Exception:
     import traceback
 
     traceback.print_exc()
