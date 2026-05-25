@@ -28,7 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
 from src.core.llm import embeddings, get_llm
-from src.core.models import Law
+from src.models import Law
 from src.services.memory import contextualize_question, save_to_history
 
 logger = logging.getLogger(__name__)

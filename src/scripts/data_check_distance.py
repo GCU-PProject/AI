@@ -14,7 +14,7 @@ sys.path.append(
 )
 
 from src.core.config import settings
-from src.core.models import Law
+from src.models import Law
 
 # chat_service에서 임베딩 모델과 임계값 설정을 가져옵니다. (로직 일치 보장)
 from src.services.chat_service import MAX_DISTANCE_THRESHOLD, embeddings

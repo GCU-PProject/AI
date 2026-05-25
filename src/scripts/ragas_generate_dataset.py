@@ -55,7 +55,7 @@ from ragas.testset.synthesizers.multi_hop import (
 from ragas.llms import LangchainLLMWrapper
 
 from src.core.database import AsyncSessionLocal
-from src.core.models import Law
+from src.models import Law
 from src.core.config import settings
 from ragas.run_config import RunConfig
 

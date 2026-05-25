@@ -47,7 +47,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.llm import get_llm
-from src.core.models import Country
+from src.models import Country
 from src.services.chat_service import (
     format_docs,
     retrieve_laws,  # 벡터 유사도 기반 법률 검색 함수

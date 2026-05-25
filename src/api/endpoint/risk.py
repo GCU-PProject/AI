@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.utils import error_response
 from src.core.database import get_db
-from src.core.models import Country
+from src.models import Country
 from src.schemas.common import CommonResponse
 from src.schemas.risk import RiskRequest
 from src.services.risk_service import get_risk_cards

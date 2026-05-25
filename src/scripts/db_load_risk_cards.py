@@ -32,7 +32,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy import select, delete
 
 from src.core.config import settings
-from src.core.models import Risk, RiskList
+from src.models import Risk, RiskList
 
 # =========================================================
 # 설정
