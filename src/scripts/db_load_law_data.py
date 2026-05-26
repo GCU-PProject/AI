@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
 from src.core.config import settings
-from src.core.models import Law
+from src.models import Law
 
 # Vertex AI 관련 import 제거됨 (필요 없음)
 

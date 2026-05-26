@@ -6,10 +6,10 @@ sys.path.append(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 )
 
-# 모델 import로 Base.metadata에 테이블 등록
-from src.core import models  # noqa: F401
-from src.core.database import Base, engine
 from sqlalchemy.ext.asyncio import AsyncEngine
+
+import src.models  # noqa: F401
+from src.core.database import Base, engine
 
 
 async def create_risk_tables(async_engine: AsyncEngine) -> None:

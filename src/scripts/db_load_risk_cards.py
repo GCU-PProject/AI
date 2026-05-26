@@ -32,7 +32,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy import select, delete
 
 from src.core.config import settings
-from src.core.models import Risk, RiskList
+from src.models import Risk, RiskList
 
 # =========================================================
 # 설정
@@ -141,7 +141,7 @@ async def load_risk_cards(input_file: str = INPUT_FILE):
 
     # ─── 4. 결과 요약 ───
     print(f"\n{'=' * 50}")
-    print(f"📊 적재 결과")
+    print("📊 적재 결과")
     print(f"   성공: {success_count}건")
     print(f"   실패: {error_count}건")
     print(f"   건너뜀: {skipped}건 (카드 없음)")

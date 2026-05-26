@@ -1,14 +1,13 @@
 import logging
 
 from fastapi import APIRouter, Depends
-from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.utils import error_response
 from src.core.database import get_db
-from src.core.models import Country
+from src.models import Country
 from src.schemas.common import CommonResponse
 from src.schemas.compare import CompareRequest, CompareResult
 from src.services.compare_service import compare_laws
@@ -77,5 +76,5 @@ async def compare_endpoint(request: CompareRequest, db: AsyncSession = Depends(g
         return error_response(
             status=500,
             code="AI_COMPARE_ANALYSIS_FAILED",
-            message=f"비교 분석 중 오류 발생",
+            message="비교 분석 중 오류 발생",
         )

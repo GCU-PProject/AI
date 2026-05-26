@@ -33,7 +33,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy import select
 
 from src.core.config import settings
-from src.core.models import Country
+from src.models import Country
 from src.services.chat_service import retrieve_laws, format_docs
 
 

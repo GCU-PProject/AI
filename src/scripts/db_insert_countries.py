@@ -25,9 +25,24 @@ cur.execute(
     """
     INSERT INTO countries (country_id, country_code, state_code, country_name, state_name)
     VALUES 
-        (1, 'US', 'CA', 'United States', 'California'),
-        (2, 'CA', NULL, 'Canada', NULL)
-    ON CONFLICT (country_id) DO NOTHING;
+        (1, 'US', NULL, 'United States', NULL),
+        (2, 'US', 'CA', 'United States', 'California'),
+        (3, 'US', 'NY', 'United States', 'New York'),
+        (4, 'CA', NULL, 'Canada', NULL),
+        (5, 'CA', 'ON', 'Canada', 'Ontario'),
+        (6, 'CA', 'BC', 'Canada', 'British Columbia')
+    ON CONFLICT (country_id) DO UPDATE
+    SET
+        country_code = EXCLUDED.country_code,
+        state_code = EXCLUDED.state_code,
+        country_name = EXCLUDED.country_name,
+        state_name = EXCLUDED.state_name;
+"""
+)
+
+cur.execute(
+    """
+    SELECT setval(pg_get_serial_sequence('countries', 'country_id'), 6, true);
 """
 )
 

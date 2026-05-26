@@ -31,7 +31,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from src.core.config import settings
 from src.core.database import AsyncSessionLocal
-from src.core.models import Law
+from src.models import Law
 
 # GCP 인증 환경변수 주입 (config.py의 자동 주입 로직과 동일)
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = settings.GOOGLE_APPLICATION_CREDENTIALS

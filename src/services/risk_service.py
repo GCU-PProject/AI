@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from src.core.models import Risk
+from src.models import Risk
 from src.schemas.risk import (
     IssueRefResponse,
     LawRefResponse,

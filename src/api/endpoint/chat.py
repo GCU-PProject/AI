@@ -12,14 +12,13 @@ import logging
 import time
 
 from fastapi import APIRouter, Depends
-from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.utils import error_response
 from src.core.database import get_db
-from src.core.models import Country
+from src.models import Country
 from src.schemas.chat import ChatRequest, ChatResult
 from src.schemas.common import CommonResponse
 from src.services.chat_service import generate_answer
@@ -91,7 +90,7 @@ async def chat_endpoint(request: ChatRequest, db: AsyncSession = Depends(get_db)
             message="법률 검색 처리 중 오류가 발생했습니다.",
         )
 
-    except Exception as e:
+    except Exception:
         logger.exception("서버 내부 오류가 발생했습니다.")
         return error_response(
             status=500,

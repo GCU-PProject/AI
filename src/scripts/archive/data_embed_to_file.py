@@ -2,7 +2,6 @@ import asyncio
 import json
 import os
 import sys
-import glob
 
 # ------------------------------------------------------------------------------
 # 1. 모듈 경로 설정

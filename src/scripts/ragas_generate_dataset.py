@@ -19,7 +19,6 @@ RAGAS 프레임워크를 이용해 RAG 평가용 합성 데이터셋(Synthetic D
 import sys
 import os
 import asyncio
-import pandas as pd
 
 # 프로젝트 루트를 sys.path에 추가
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
@@ -56,7 +55,7 @@ from ragas.testset.synthesizers.multi_hop import (
 from ragas.llms import LangchainLLMWrapper
 
 from src.core.database import AsyncSessionLocal
-from src.core.models import Law
+from src.models import Law
 from src.core.config import settings
 from ragas.run_config import RunConfig
 
@@ -184,7 +183,7 @@ async def generate_dataset():
     print(
         f"⚙️ [4/5] RAGAS 테스트셋 생성 시작! (목표: {TESTSET_SIZE}개, 시간이 걸릴 수 있습니다)"
     )
-    print(f"   - 비율: SingleHop 50%, MultiHopAbstract 20%, MultiHopSpecific 30%")
+    print("   - 비율: SingleHop 50%, MultiHopAbstract 20%, MultiHopSpecific 30%")
 
     try:
         # ── 테스트셋 생성 (신버전 API) ──
