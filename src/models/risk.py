@@ -1,3 +1,5 @@
+# src/models/risk.py
+
 from sqlalchemy import (
     JSON,
     BigInteger,
@@ -15,7 +17,18 @@ from src.core.database import Base
 
 
 class Risk(Base):
-    """리스크 조합 단위 저장 테이블"""
+    """
+    리스크 조합 단위 저장 테이블
+
+    국가, 여행 목적, 비자 종류, 연령대를 하나의 조건 조합으로 저장합니다.
+    각 조합은 여러 개의 리스크 카드(RiskList)를 가질 수 있습니다.
+
+    [데이터 예시]
+    | risk_id | country_id | travel_purpose | visa_type  | age_band | overall_risk_level |
+    |---------|------------|----------------|------------|----------|--------------------|
+    | 1       | 1          | tourism        | short_stay | 20s      | MEDIUM             |
+    | 2       | 1          | work           | work_permit| 30s      | HIGH               |
+    """
 
     __tablename__ = "risk"
     # 동일 국가/조건 조합은 1건만 유지
@@ -48,7 +61,18 @@ class Risk(Base):
 
 
 class RiskList(Base):
-    """리스크 카드 단위 저장 테이블"""
+    """
+    리스크 카드 단위 저장 테이블
+
+    하나의 리스크 조합(Risk)에 속하는 개별 리스크 카드 정보를 저장합니다.
+    화면에는 sort_order 순서대로 여러 개의 카드가 노출됩니다.
+
+    [데이터 예시]
+    | risk_list_id | risk_id | sort_order | risk_title        | risk_level |
+    |--------------|---------|------------|-------------------|------------|
+    | 1            | 1       | 1          | 음주 관련 법적 위험 | HIGH       |
+    | 2            | 1       | 2          | 교통 법규 위반 위험 | MEDIUM     |
+    """
 
     __tablename__ = "risk_list"
     # 같은 리스크 조합 내에서 정렬 순서 중복 방지
