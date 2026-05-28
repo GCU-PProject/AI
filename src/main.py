@@ -62,9 +62,9 @@ app.add_middleware(
 # - tags: Swagger 문서에서 그룹핑할 이름
 
 # 라우터: /api/qna, /api/compare, /api/risk
-app.include_router(chat.router, prefix="/api", tags=["Chat API"])
-app.include_router(compare.router, prefix="/api", tags=["Compare API"])
-app.include_router(risk.router, prefix="/api", tags=["Risk API"])
+app.include_router(chat.router, prefix="/ai", tags=["Chat API"])
+app.include_router(compare.router, prefix="/ai", tags=["Compare API"])
+app.include_router(risk.router, prefix="/ai", tags=["Risk API"])
 
 
 # =========================================================
