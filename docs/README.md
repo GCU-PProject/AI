@@ -101,7 +101,7 @@ GLAW/AI/
 │   │   ├── data_check_distance.py    # 벡터 거리 테스트
 │   │   ├── data_check_models.py      # GCP 모델 연결 테스트
 │   │   ├── db_load_law_data.py       # 법률 데이터 DB 적재
-│   │   ├── db_create_risk_tables.py  # 리스크 테이블 생성
+│   │   ├── db_create_tables.py       # 전체 테이블 생성
 │   │   ├── db_load_risk_cards.py     # 리스크 카드 DB 적재
 │   │   ├── db_insert_countries.py    # 국가 초기 데이터 삽입
 │   │   ├── db_check_connection.py    # DB 연결 확인

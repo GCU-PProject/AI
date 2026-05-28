@@ -328,7 +328,7 @@ src/
 │   ├── db_load_law_data.py      # DB 적재
 │   ├── db_insert_countries.py   # 국가 초기 데이터 삽입
 │   ├── db_check_connection.py   # DB 연결 확인
-│   ├── db_create_risk_tables.py # 리스크 테이블 생성
+│   ├── db_create_tables.py      # 전체 테이블 생성
 │   ├── db_load_risk_cards.py    # 리스크 카드 DB 적재
 │   └── data_risk_generate_cards.py   # 리스크 카드 생성 (LLM 호출)
 └── main.py                    # FastAPI 앱 진입점
@@ -944,4 +944,3 @@ async def chat_stream_endpoint(request, db):
 | 낮음 | LangSmith 연동 | LangChain 체인 실행 과정 시각화, 추적 및 지연 시간 분석 |
 | 낮음 | 의미적 캐싱 (Cache) | 유사 질문 반복 시 LLM 호출 횟수 감소 (비용 절감) |
 | 낮음 | GCP VM 자동화 배포 | CI/CD 구축 및 서버/DB 인프라 프로덕션 수준 확장 |
-
