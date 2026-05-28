@@ -150,12 +150,14 @@ async def contextualize_question(query: str, session_id: Optional[str], llm) -> 
     # 저장 시점에 이미 MEMORY_WINDOW_SIZE 만큼 잘려있으므로 전체를 그대로 전달합니다.
     recent_messages = history.messages
 
-    contextualized = await chain.ainvoke(
+    contextualized_res = await chain.ainvoke(
         {
             "chat_history": recent_messages,
             "input": query,
         }
     )
+    contextualized = str(contextualized_res)
+
 
     # 안전장치: 재구성 결과가 비어있으면 원본 질문을 그대로 사용
     # (토큰 제한 등으로 LLM이 빈 문자열을 반환하는 경우 방지)

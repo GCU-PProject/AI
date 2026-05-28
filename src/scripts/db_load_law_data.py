@@ -40,7 +40,9 @@ def parse_datetime(value: str | None) -> datetime | None:
         return None
 
     try:
-        return datetime.fromisoformat(value)
+        # Handle standard ISO formats, preserving timezone offset if present
+        # Replace 'Z' suffix with '+00:00' to support fromisoformat in standard library
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
         return None
 

@@ -111,7 +111,13 @@ async def translate_query(query: str) -> str:
         데이터가 왼쪽에서 오른쪽으로 순차적으로 흐릅니다.
     """
     chain = TRANSLATION_PROMPT | llm | StrOutputParser()
-    translated = await chain.ainvoke({"query": query})
+    translated_res = await chain.ainvoke({"query": query})
+    
+    # [중요] 최신 LangChain 버전에서 StrOutputParser()의 출력이 문자열이 아닌
+    # TextAccessor 객체로 반환될 수 있습니다. 이를 순수 str 자료형으로 강제 변환해주어야
+    # 임베딩 라이브러리(GoogleGenerativeAIEmbeddings)에서 'Empty instances' 에러가 나는 것을 방지할 수 있습니다.
+    translated = str(translated_res)
+    
     if not translated or not translated.strip():
         raise ValueError("번역 결과가 없습니다.")
     logger.info("번역 완료: '%s' → '%s'", query, translated)
@@ -184,9 +190,23 @@ async def retrieve_laws(
         - law_ids: 검색된 법률의 ID 리스트 (API 응답의 related_law_id_list에 사용)
     """
     # Step 1: 질문을 벡터로 변환
+    if not query:
+        logger.warning("⚠️ retrieve_laws에 빈 query가 전달되었습니다.")
+        return [], []
+
+    query_str = str(query).strip()
+    if not query_str:
+        logger.warning("⚠️ retrieve_laws에 공백만 있는 query가 전달되었습니다.")
+        return [], []
+
     # embed_query()는 텍스트를 768차원 숫자 배열로 변환합니다.
     # 예: "DUI penalties" → [0.012, -0.034, 0.056, ..., 0.078] (768개)
-    query_vector = embeddings.embed_query(query)
+    try:
+        query_vector = embeddings.embed_query(query_str)
+    except Exception as e:
+        logger.error("❌ embed_query 중 오류 발생! 입력 쿼리: %r, 에러: %s", query_str, e)
+        raise
+
 
     # Step 2: DB에서 벡터 유사도 검색 (SQLAlchemy + pgvector)
     # - Law.embedding.l2_distance(query_vector): 질문 벡터와 각 법률 벡터 간의 L2 거리 계산

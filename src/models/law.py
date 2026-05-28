@@ -42,9 +42,9 @@ class Law(Base):
     content = Column(Text, nullable=False)
     # 출처 URL
     source_url = Column(String, nullable=True)
-    # 날짜 필드
-    enactment_date = Column(DateTime, nullable=True)  # 제정일
-    amendment_date = Column(DateTime, nullable=True)  # 개정일
+    # 날짜 필드 (타임존 보존)
+    enactment_date = Column(DateTime(timezone=True), nullable=True)  # 제정일
+    amendment_date = Column(DateTime(timezone=True), nullable=True)  # 개정일
     # 관리용 날짜 (DB에서 자동 입력)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(
