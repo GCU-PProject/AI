@@ -36,7 +36,7 @@ from src.models import Law
 # GCP 인증 환경변수 주입 (config.py의 자동 주입 로직과 동일)
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = settings.GOOGLE_APPLICATION_CREDENTIALS
 
-from langchain_google_vertexai import ChatVertexAI, VertexAIEmbeddings
+from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 from langchain_core.prompts import ChatPromptTemplate, load_prompt
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.documents import Document
@@ -68,28 +68,31 @@ MAX_DISTANCE_THRESHOLD = settings.RAG_MAX_DISTANCE_THRESHOLD
 # =========================================================
 # 2. AI 모델 초기화 (chat_service.py와 동일)
 # =========================================================
-embeddings = VertexAIEmbeddings(
-    model_name="text-embedding-005",
+embeddings = GoogleGenerativeAIEmbeddings(
+    model="text-embedding-005",
     project=settings.GCP_PROJECT_ID,
     location=settings.GCP_LOCATION,
+    vertexai=True,
 )
 
 # 답변 생성용 LLM (서비스와 동일한 모델 사용)
-llm = ChatVertexAI(
-    model_name=settings.GCP_MODEL_NAME,
+llm = ChatGoogleGenerativeAI(
+    model=settings.GCP_MODEL_NAME,
     project=settings.GCP_PROJECT_ID,
     location=settings.GCP_LOCATION,
+    vertexai=True,
     temperature=0,
-    max_output_tokens=4096,
+    max_tokens=4096,
     top_k=20,
     top_p=0.7,
 )
 
 # 평가 채점용 LLM (고성능 Pro 모델 사용)
-eval_llm = ChatVertexAI(
-    model_name="gemini-2.5-pro",
+eval_llm = ChatGoogleGenerativeAI(
+    model="gemini-2.5-pro",
     project=settings.GCP_PROJECT_ID,
     location=settings.GCP_LOCATION,
+    vertexai=True,
     temperature=0,
 )
 

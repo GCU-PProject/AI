@@ -5,12 +5,11 @@ data_risk_generate_cards.py
 
 실행 예시:
 python -m src.scripts.data_risk_generate_cards
-python -m src.scripts.data_risk_generate_cards --country-id 1
-python -m src.scripts.data_risk_generate_cards --dry-run
+python -m src.scripts.data_risk_generate_cards --limit 3
 """
 
-import asyncio
 import argparse
+import asyncio
 import itertools
 import json
 import os
@@ -25,16 +24,16 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from langchain_google_vertexai import ChatVertexAI
-from langchain_core.prompts import ChatPromptTemplate, load_prompt
 from langchain_core.output_parsers import JsonOutputParser
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker
+from langchain_core.prompts import ChatPromptTemplate, load_prompt
+from langchain_google_genai import ChatGoogleGenerativeAI
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.orm import sessionmaker
 
 from src.core.config import settings
 from src.models import Country
-from src.services.chat_service import retrieve_laws, format_docs
+from src.services.chat_service import format_docs, retrieve_laws
 
 
 # =========================================================
@@ -54,12 +53,13 @@ OUTPUT_FILE = os.path.join(BASE_DIR, "data", "risk_cards.json")
 # =========================================================
 # 2. LLM + 프롬프트 초기화
 # =========================================================
-llm = ChatVertexAI(
-    model_name="gemini-2.5-pro",
+llm = ChatGoogleGenerativeAI(
+    model=settings.GCP_MODEL_NAME,
     project=settings.GCP_PROJECT_ID,
     location=settings.GCP_LOCATION,
+    vertexai=True,
     temperature=0,
-    max_output_tokens=8192,
+    max_tokens=8192,
 )
 
 parser = JsonOutputParser()
@@ -186,16 +186,15 @@ async def get_all_countries(db: AsyncSession) -> list[dict]:
     ]
 
 
-async def main(country_id_filter: int | None = None, dry_run: bool = False):
+async def main(
+    limit: int | None = None,
+):
     print("🚀 리스크 카드 배치 생성 시작")
-    print(f"   모드: {'드라이런 (STEP 1만)' if dry_run else '전체 실행'}")
     engine = create_async_engine(settings.ASYNC_DATABASE_URL, echo=False)
     async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     all_results = []
     async with async_session() as db:
         countries = await get_all_countries(db)
-        if country_id_filter:
-            countries = [c for c in countries if c["country_id"] == country_id_filter]
         if not countries:
             print("❌ 대상 국가가 없습니다.")
             return
@@ -203,6 +202,8 @@ async def main(country_id_filter: int | None = None, dry_run: bool = False):
         combinations = list(
             itertools.product(countries, TRAVEL_PURPOSES, VISA_TYPES, AGE_BANDS)
         )
+        if limit:
+            combinations = combinations[:limit]
         total = len(combinations)
         print(f"📊 총 조합 수: {total}")
         for idx, (country, purpose, visa, age) in enumerate(combinations, 1):
@@ -214,28 +215,6 @@ async def main(country_id_filter: int | None = None, dry_run: bool = False):
                 print("  ⚠️ 주제 생성 실패, 건너뜁니다.")
                 continue
             print(f"  ✅ 주제 {len(topics)}개 생성됨")
-            if dry_run:
-                for t in topics:
-                    print(
-                        f"    - [{t.get('risk_level', '?')}] {t.get('risk_title', '?')}"
-                    )
-                all_results.append(
-                    {
-                        "country_id": cid,
-                        "travel_purpose": purpose,
-                        "visa_type": visa,
-                        "age_band": age,
-                        "overall_risk_level": "PENDING",
-                        "risk_list": [],
-                        "_meta": {
-                            "generated_at": datetime.now().isoformat(),
-                            "mode": "dry_run",
-                            "total_topics": len(topics),
-                            "topics_preview": [t.get("risk_title", "") for t in topics],
-                        },
-                    }
-                )
-                continue
             print("  🔍 STEP 2: 법령 검색 + 본문 생성 중...")
             cards, filtered_reasons = [], {}
             for t_idx, topic in enumerate(topics, 1):
@@ -284,20 +263,18 @@ async def main(country_id_filter: int | None = None, dry_run: bool = False):
     total_cards = sum(len(r["risk_list"]) for r in all_results)
     print(f"\n💾 저장 완료: {OUTPUT_FILE}")
     print(f"📊 총 {len(all_results)}개 조합, {total_cards}개 카드")
-    if not dry_run:
-        total_filtered = sum(
-            r.get("_meta", {}).get("filtered_count", 0) for r in all_results
-        )
-        print(f"   제거된 카드: {total_filtered}개")
+    total_filtered = sum(
+        r.get("_meta", {}).get("filtered_count", 0) for r in all_results
+    )
+    print(f"   제거된 카드: {total_filtered}개")
     await engine.dispose()
     print("🎉 배치 생성 완료!")
 
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser(description="리스크 카드 배치 생성")
-    p.add_argument("--country-id", type=int, default=None, help="특정 국가만 실행")
-    p.add_argument("--dry-run", action="store_true", help="STEP 1만 실행")
+    p.add_argument("--limit", type=int, default=None, help="테스트용 최대 조합 수")
     args = p.parse_args()
     if sys.platform == "win32":
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    asyncio.run(main(country_id_filter=args.country_id, dry_run=args.dry_run))
+    asyncio.run(main(limit=args.limit))

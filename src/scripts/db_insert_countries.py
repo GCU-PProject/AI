@@ -1,57 +1,113 @@
 """countries 테이블에 초기 데이터 삽입"""
 
-import psycopg2
 import os
 import sys
 
 sys.path.append(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 )
+
 from dotenv import load_dotenv
+from sqlalchemy import create_engine, text
 
 load_dotenv()
 
-conn = psycopg2.connect(
-    host=os.getenv("DB_HOST", "127.0.0.1"),
-    port=os.getenv("DB_PORT", "5432"),
-    user=os.getenv("DB_USER"),
-    password=os.getenv("DB_PASSWORD"),
-    dbname=os.getenv("DB_NAME"),
-    sslmode="require",
-)
-cur = conn.cursor()
+from src.core.config import settings
 
-cur.execute(
-    """
-    INSERT INTO countries (country_id, country_code, state_code, country_name, state_name)
-    VALUES 
-        (1, 'US', NULL, 'United States', NULL),
-        (2, 'US', 'CA', 'United States', 'California'),
-        (3, 'US', 'NY', 'United States', 'New York'),
-        (4, 'CA', NULL, 'Canada', NULL),
-        (5, 'CA', 'ON', 'Canada', 'Ontario'),
-        (6, 'CA', 'BC', 'Canada', 'British Columbia')
-    ON CONFLICT (country_id) DO UPDATE
-    SET
-        country_code = EXCLUDED.country_code,
-        state_code = EXCLUDED.state_code,
-        country_name = EXCLUDED.country_name,
-        state_name = EXCLUDED.state_name;
-"""
-)
+COUNTRIES = [
+    {
+        "country_id": 1,
+        "country_code": "US",
+        "state_code": None,
+        "country_name": "United States",
+        "state_name": None,
+    },
+    {
+        "country_id": 2,
+        "country_code": "US",
+        "state_code": "CA",
+        "country_name": "United States",
+        "state_name": "California",
+    },
+    {
+        "country_id": 3,
+        "country_code": "US",
+        "state_code": "NY",
+        "country_name": "United States",
+        "state_name": "New York",
+    },
+    {
+        "country_id": 4,
+        "country_code": "CA",
+        "state_code": None,
+        "country_name": "Canada",
+        "state_name": None,
+    },
+    {
+        "country_id": 5,
+        "country_code": "CA",
+        "state_code": "ON",
+        "country_name": "Canada",
+        "state_name": "Ontario",
+    },
+    {
+        "country_id": 6,
+        "country_code": "CA",
+        "state_code": "BC",
+        "country_name": "Canada",
+        "state_name": "British Columbia",
+    },
+]
 
-cur.execute(
-    """
-    SELECT setval(pg_get_serial_sequence('countries', 'country_id'), 6, true);
-"""
-)
 
-conn.commit()
-print("✅ Countries 데이터 삽입 성공!")
+def insert_countries() -> None:
+    engine = create_engine(settings.DATABASE_URL)
 
-cur.execute("SELECT * FROM countries;")
-for row in cur.fetchall():
-    print(f"  {row}")
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                INSERT INTO countries (
+                    country_id,
+                    country_code,
+                    state_code,
+                    country_name,
+                    state_name
+                )
+                VALUES (
+                    :country_id,
+                    :country_code,
+                    :state_code,
+                    :country_name,
+                    :state_name
+                )
+                ON CONFLICT (country_id) DO UPDATE
+                SET
+                    country_code = EXCLUDED.country_code,
+                    state_code = EXCLUDED.state_code,
+                    country_name = EXCLUDED.country_name,
+                    state_name = EXCLUDED.state_name;
+                """
+            ),
+            COUNTRIES,
+        )
+        conn.execute(
+            text("SELECT setval(pg_get_serial_sequence('countries', 'country_id'), 6, true);")
+        )
+        rows = conn.execute(
+            text(
+                """
+                SELECT country_id, country_code, state_code, country_name, state_name
+                FROM countries
+                ORDER BY country_id;
+                """
+            )
+        ).all()
 
-cur.close()
-conn.close()
+    print("✅ Countries 데이터 삽입 성공!")
+    for row in rows:
+        print(f"  {row}")
+
+
+if __name__ == "__main__":
+    insert_countries()

@@ -8,19 +8,16 @@ sys.path.append(
 from src.core.config import settings
 
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = settings.GOOGLE_APPLICATION_CREDENTIALS
-from langchain_google_vertexai import ChatVertexAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 
-MODEL_NAME = (
-    "gemini-2.5-flash"  # 이곳을 "gemini-3.0-flash" 등으로 변경하여 테스트하세요.
-)
-
-llm = ChatVertexAI(
-    model_name=MODEL_NAME,
+llm = ChatGoogleGenerativeAI(
+    model=settings.GCP_MODEL_NAME,
     project=settings.GCP_PROJECT_ID,
     location=settings.GCP_LOCATION,
+    vertexai=True,
 )
 try:
-    print(f"Testing Model: {MODEL_NAME} ...")
+    print(f"Testing Model: {settings.GCP_MODEL_NAME} ...")
     res = llm.invoke("hi")
     print("SUCCESS:", res.content)
 except Exception:

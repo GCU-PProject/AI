@@ -1,8 +1,10 @@
 import asyncio
+import argparse
 import glob
 import json
 import os
 import sys
+from datetime import datetime
 
 # ------------------------------------------------------------------------------
 # 1. 모듈 경로 설정
@@ -17,18 +19,56 @@ from sqlalchemy.orm import sessionmaker
 from src.core.config import settings
 from src.models import Law
 
-# Vertex AI 관련 import 제거됨 (필요 없음)
-
-
-# ------------------------------------------------------------------------------
-# 2. 전역 설정
-# ------------------------------------------------------------------------------
 DATABASE_URL = settings.ASYNC_DATABASE_URL
-# 수동으로 국가/주 ID 지정
-TARGET_COUNTRY_ID = 2
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+DEFAULT_PATTERN = os.path.join(BASE_DIR, "data", "*_Embedded.jsonl")
+BATCH_SIZE = 1000
+REQUIRED_FIELDS = (
+    "country_id",
+    "law_type",
+    "section_title",
+    "article_no",
+    "content",
+    "source_url",
+    "embedding",
+)
 
 
-async def step2_load_to_db():
+def parse_datetime(value: str | None) -> datetime | None:
+    """JSONL 문자열 날짜를 PostgreSQL DateTime에 넣을 수 있는 값으로 변환합니다."""
+    if not value:
+        return None
+
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def find_input_files() -> list[str]:
+    return sorted(glob.glob(DEFAULT_PATTERN))
+
+
+def build_law(row: dict) -> Law | None:
+    if any(row.get(field) is None for field in REQUIRED_FIELDS):
+        return None
+
+    return Law(
+        country_id=row["country_id"],
+        law_type=row["law_type"],
+        section_title=row["section_title"],
+        article_no=row["article_no"],
+        content=row["content"],
+        source_url=row["source_url"],
+        enactment_date=parse_datetime(row.get("enactment_date")),
+        amendment_date=parse_datetime(row.get("amendment_date")),
+        embedding=row["embedding"],
+    )
+
+
+async def load_law_data(
+    limit: int | None = None,
+) -> None:
     # --------------------------------------------------
     # 3. 초기화 (DB Only) - Vertex AI 제거됨
     # --------------------------------------------------
@@ -36,90 +76,77 @@ async def step2_load_to_db():
     print("🔌 DB 연결 중...")
     engine = create_async_engine(DATABASE_URL, echo=False)
     async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-
-    # --------------------------------------------------
-    # 4. 파일 탐색 (Embedded 파일 찾기)
-    # --------------------------------------------------
-    # 프로젝트 루트 경로 (src/scripts/db_load_law_data.py 기준 ../../)
-    base_dir = os.path.dirname(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    )
-
-    # 루트 디렉토리에서 '_embedded.jsonl'로 끝나는 모든 파일 찾기
-    search_pattern = os.path.join(base_dir, "data", "*_embedded.jsonl")
-    files = glob.glob(search_pattern)
+    files = find_input_files()
 
     if not files:
-        print(
-            "🚨 '_embedded.jsonl' 파일을 찾을 수 없습니다. (검색 경로: {})".format(
-                search_pattern
-            )
-        )
+        print(f"🚨 Embedded JSONL 파일을 찾을 수 없습니다. (검색 경로: {DEFAULT_PATTERN})")
+        await engine.dispose()
         return
 
     print(f"📂 발견된 데이터 파일: {files}")
 
-    # --------------------------------------------------
-    # 5. 데이터 적재 루프
-    # --------------------------------------------------
-    async with async_session() as session:
-        for filename in files:
-            print(f"📏 개수 세는 중: {filename}...", end="\r")
-            with open(filename, "r", encoding="utf-8") as f_cnt:
-                total_lines = sum(1 for line in f_cnt if line.strip())
-            print(f"\n🚀 DB 적재 시작: {filename}")
+    try:
+        async with async_session() as session:
+            for filename in files:
+                print(f"📏 개수 세는 중: {filename}...", end="\r")
+                with open(filename, "r", encoding="utf-8") as f_cnt:
+                    total_lines = sum(1 for line in f_cnt if line.strip())
+                if limit:
+                    total_lines = min(total_lines, limit)
+                print(f"\n🚀 DB 적재 시작: {filename}")
 
-            with open(filename, "r", encoding="utf-8") as f:
-                batch_objects = []  # DB 저장용 객체 리스트
-                current_count = 0
+                batch_objects = []
+                saved_count = 0
+                skipped_count = 0
 
-                for line in f:
-                    if not line.strip():
-                        continue
-                    row = json.loads(line)
+                with open(filename, "r", encoding="utf-8") as f:
+                    for line in f:
+                        if limit and saved_count + skipped_count >= limit:
+                            break
+                        if not line.strip():
+                            continue
 
-                    # (B) Law 객체 생성 (로직 유지)
-                    # 1단계 파일에서 'embedding' 값을 가져옵니다.
-                    law_obj = Law(
-                        country_id=TARGET_COUNTRY_ID,
-                        law_type=row.get("law_code"),
-                        section_title=row.get("category"),
-                        article_no=row.get("article_no"),
-                        content=row.get("content"),
-                        source_url=row.get("url"),
-                        embedding=row.get("embedding"),
-                    )
-                    batch_objects.append(law_obj)
+                        row = json.loads(line)
+                        law_obj = build_law(row)
+                        if law_obj is None:
+                            skipped_count += 1
+                            continue
 
-                    # (C) 배치 처리 (1000개씩 빠르게 저장)
-                    # API 호출이 없으므로 배치 사이즈를 늘려도 됩니다.
-                    BATCH_SIZE = 1000
-                    if len(batch_objects) >= BATCH_SIZE:
+                        batch_objects.append(law_obj)
+
+                        if len(batch_objects) >= BATCH_SIZE:
+                            session.add_all(batch_objects)
+                            await session.commit()
+
+                            saved_count += len(batch_objects)
+                            progress = (saved_count + skipped_count) / total_lines * 100
+                            print(
+                                f"   💾 DB 저장: {saved_count}/{total_lines}건 "
+                                f"(스킵 {skipped_count}건, {progress:.1f}%)",
+                                end="\r",
+                            )
+                            batch_objects = []
+
+                    if batch_objects:
                         session.add_all(batch_objects)
                         await session.commit()
+                        saved_count += len(batch_objects)
 
-                        current_count += len(batch_objects)
-                        progress = (current_count / total_lines) * 100
-                        print(
-                            f"   💾 DB 저장: {current_count}/{total_lines}건 ({progress:.1f}%)",
-                            end="\r",
-                        )
+                print(
+                    f"\n✅ 파일 완료: {filename} "
+                    f"(저장 {saved_count}건, 스킵 {skipped_count}건)"
+                )
 
-                        batch_objects = []
-
-                # (D) 남은 데이터 처리
-                if batch_objects:
-                    session.add_all(batch_objects)
-                    await session.commit()
-                    current_count += len(batch_objects)
-                    print(f"   💾 DB 저장: {current_count}/{total_lines}건 (100.0%)")
-
-            print(f"✅ 파일 완료: {filename} (총 {current_count}건 저장)")
-
-    print("\n🎉 2단계 완료! 모든 데이터가 DB에 안전하게 저장되었습니다.")
+        print("\n🎉 법률 데이터 DB 적재 완료!")
+    finally:
+        await engine.dispose()
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="임베딩 완료 법률 JSONL DB 적재")
+    parser.add_argument("--limit", type=int, default=None, help="테스트용 최대 적재 행 수")
+    args = parser.parse_args()
+
     if sys.platform == "win32":
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    asyncio.run(step2_load_to_db())
+    asyncio.run(load_law_data(limit=args.limit))

@@ -1,17 +1,18 @@
-# src/core/llm.py
+from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 
-from langchain_google_vertexai import VertexAIEmbeddings, ChatVertexAI
 from src.core.config import settings
 
 # (1) 임베딩 모델: 텍스트를 768차원의 숫자 배열(벡터)로 변환
 # - 사용 모델: Google Vertex AI의 text-embedding-005
 # - 용도: 사용자 질문을 벡터로 변환하여 DB의 법률 벡터와 거리 비교
 # - 출력: 768개의 숫자로 구성된 배열 (예: [0.012, -0.034, 0.056, ...])
-embeddings = VertexAIEmbeddings(
-    model_name="text-embedding-005",
+embeddings = GoogleGenerativeAIEmbeddings(
+    model="text-embedding-005",
     project=settings.GCP_PROJECT_ID,
     location=settings.GCP_LOCATION,
+    vertexai=True,
 )
+
 
 # (2) LLM (Large Language Model): 답변을 생성하는 AI 모델
 # - 사용 모델: Google Gemini (gemini-2.5-flash)
@@ -29,14 +30,14 @@ embeddings = VertexAIEmbeddings(
 #
 # ※ temperature=0이면 항상 최고 확률 단어를 선택하므로 top_k, top_p의 실질적 영향은
 #   미미하지만, 안전장치로 설정
-def get_llm(max_output_tokens: int = 4096) -> ChatVertexAI:
-    return ChatVertexAI(
-        model_name=settings.GCP_MODEL_NAME,
+def get_llm(max_output_tokens: int = 4096) -> ChatGoogleGenerativeAI:
+    return ChatGoogleGenerativeAI(
+        model=settings.GCP_MODEL_NAME,
         project=settings.GCP_PROJECT_ID,
         location=settings.GCP_LOCATION,
+        vertexai=True,
         temperature=0,
-        max_output_tokens=max_output_tokens,
+        max_tokens=max_output_tokens,
         top_k=20,
         top_p=0.7,
     )
-    

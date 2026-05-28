@@ -25,7 +25,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from sqlalchemy import select, func
 from langchain_core.documents import Document
-from langchain_google_vertexai import ChatVertexAI, VertexAIEmbeddings
+from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 
 # ====================================================================
 # RAGAS 관련 임포트 (0.4.x 신버전 API)
@@ -120,17 +120,19 @@ async def generate_dataset():
     print("🧠 [2/5] Vertex AI 모델 및 RAGAS 컴포넌트를 초기화합니다...")
 
     # ── Vertex AI 모델 초기화 ──
-    llm = ChatVertexAI(
-        model_name="gemini-2.5-pro",  # pro 모델로 고정
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-2.5-pro",  # pro 모델로 고정
         project=settings.GCP_PROJECT_ID,
         location=settings.GCP_LOCATION,
+        vertexai=True,
         temperature=0.0,  # 법률 AI의 일관성과 정확성을 위해 0.0으로 고정
     )
 
-    embeddings = VertexAIEmbeddings(
-        model_name="text-embedding-005",
+    embeddings = GoogleGenerativeAIEmbeddings(
+        model="text-embedding-005",
         project=settings.GCP_PROJECT_ID,
         location=settings.GCP_LOCATION,
+        vertexai=True,
     )
 
     # ── TestsetGenerator 생성 (신버전 API) ──

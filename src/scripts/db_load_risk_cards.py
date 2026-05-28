@@ -27,9 +27,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy import delete, select
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy import select, delete
 
 from src.core.config import settings
 from src.models import Risk, RiskList
@@ -42,21 +42,33 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fil
 INPUT_FILE = os.path.join(BASE_DIR, "data", "risk_cards.json")
 
 
-async def load_risk_cards(input_file: str = INPUT_FILE):
+def is_valid_risk_item(item: dict) -> bool:
+    required = [
+        "country_id",
+        "travel_purpose",
+        "visa_type",
+        "age_band",
+        "overall_risk_level",
+        "risk_list",
+    ]
+    return all(item.get(field) for field in required)
+
+
+async def load_risk_cards():
     # ─── 1. JSON 파일 읽기 ───
-    if not os.path.exists(input_file):
-        print(f"❌ 파일을 찾을 수 없습니다: {input_file}")
+    if not os.path.exists(INPUT_FILE):
+        print(f"❌ 파일을 찾을 수 없습니다: {INPUT_FILE}")
         print("   경로를 다시 확인해주세요.")
         return
 
-    with open(input_file, "r", encoding="utf-8") as f:
+    with open(INPUT_FILE, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    print(f"📂 파일 로드 완료: {input_file}")
+    print(f"📂 파일 로드 완료: {INPUT_FILE}")
     print(f"📊 총 {len(data)}개 조합")
 
-    # risk_list가 비어있는 조합 건너뛰기
-    valid_data = [d for d in data if d.get("risk_list")]
+    # 필수 필드가 없거나 risk_list가 비어있는 조합 건너뛰기
+    valid_data = [d for d in data if is_valid_risk_item(d)]
     skipped = len(data) - len(valid_data)
     if skipped:
         print(f"   ⚠️ 카드가 없는 조합 {skipped}개 건너뜀")
@@ -151,17 +163,7 @@ async def load_risk_cards(input_file: str = INPUT_FILE):
     print("\n🎉 DB 적재 완료!")
 
 
-import argparse
-
 if __name__ == "__main__":
-    p = argparse.ArgumentParser(description="리스크 카드 DB 적재")
-    p.add_argument("--input", type=str, default=INPUT_FILE, help="적재할 JSON 파일 이름/경로")
-    args = p.parse_args()
-    
-    input_path = args.input if os.path.isabs(args.input) else os.path.join(BASE_DIR, "data", args.input)
-    if args.input == INPUT_FILE:
-        input_path = INPUT_FILE
-
     if sys.platform == "win32":
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    asyncio.run(load_risk_cards(input_file=input_path))
+    asyncio.run(load_risk_cards())
