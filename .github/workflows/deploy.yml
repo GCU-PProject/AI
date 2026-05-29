@@ -1,0 +1,28 @@
+name: Deploy FastAPI
+
+# dev 브랜치에 push되면 자동 실행
+on:
+  push:
+    branches: [dev]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 배스천(Nginx) 경유 FastAPI VM 배포
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          # 최종 접속 대상: FastAPI VM (내부 IP)
+          host: 10.0.1.2
+          username: glawadmin
+          key: ${{ secrets.SSH_KEY }}
+          # 점프 호스트(배스천): Nginx VM (외부 IP)
+          # .ssh/config의 "ProxyJump glaw-nginx"와 동일한 원리
+          proxy_host: 34.22.90.53
+          proxy_username: glawadmin
+          proxy_key: ${{ secrets.SSH_KEY }}
+          # 서버에서 실행할 배포 명령
+          script: |
+            cd ~/AI
+            git pull origin dev
+            sudo systemctl restart fastapi
