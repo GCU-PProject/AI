@@ -1,17 +1,25 @@
-from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
+import httpx
+from langchain_google_genai import ChatGoogleGenerativeAI
 
 from src.core.config import settings
 
-# (1) 임베딩 모델: 텍스트를 768차원의 숫자 배열(벡터)로 변환
-# - 사용 모델: Google Vertex AI의 text-embedding-005
-# - 용도: 사용자 질문을 벡터로 변환하여 DB의 법률 벡터와 거리 비교
-# - 출력: 768개의 숫자로 구성된 배열 (예: [0.012, -0.034, 0.056, ...])
-embeddings = GoogleGenerativeAIEmbeddings(
-    model="text-embedding-005",
-    project=settings.GCP_PROJECT_ID,
-    location=settings.GCP_LOCATION,
-    vertexai=True,
-)
+
+# (1) 임베딩 클라이언트: 로컬 Qwen3 임베딩 서버를 HTTP로 호출
+# - 데이터(DB)는 Qwen3-Embedding-0.6B로 임베딩되어 있으므로, 쿼리도 같은 모델로 임베딩해야 함
+# - instruction 접두사 + mean pooling + L2 정규화는 임베딩 서버(embed_server.py)가 처리하므로
+#   여기서는 순수 쿼리 텍스트만 그대로 전달한다 (접두사 중복 부착 금지)
+# - LangChain의 embeddings.embed_query() 인터페이스를 흉내내어 chat_service와 호환 유지
+class RemoteEmbeddings:
+    def __init__(self, url: str = settings.EMBEDDING_URL):
+        self.url = url.rstrip("/")
+
+    def embed_query(self, text: str) -> list[float]:
+        resp = httpx.post(f"{self.url}/embed", json={"inputs": text}, timeout=30)
+        resp.raise_for_status()
+        return resp.json()[0]
+
+
+embeddings = RemoteEmbeddings()
 
 
 # (2) LLM (Large Language Model): 답변을 생성하는 AI 모델
