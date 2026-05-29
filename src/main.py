@@ -44,7 +44,8 @@ logging.basicConfig(level=logging.INFO)
 # FastAPI 앱 생성
 # - title: Swagger 문서(/docs)에 표시되는 API 이름
 # - version: API 버전 (운영 배포 시 관리용)
-app = FastAPI(title="GLAW AI Backend", version="0.2.0")
+# - root_path: 프록시 경로
+app = FastAPI(title="GLAW AI Backend", version="0.2.0", root_path="/ai")
 
 app.add_middleware(
     CORSMiddleware,
@@ -62,9 +63,9 @@ app.add_middleware(
 # - tags: Swagger 문서에서 그룹핑할 이름
 
 # 라우터: /api/qna, /api/compare, /api/risk
-app.include_router(chat.router, prefix="/ai", tags=["Chat API"])
-app.include_router(compare.router, prefix="/ai", tags=["Compare API"])
-app.include_router(risk.router, prefix="/ai", tags=["Risk API"])
+app.include_router(chat.router, prefix="/api", tags=["Chat API"])
+app.include_router(compare.router, prefix="/api", tags=["Compare API"])
+app.include_router(risk.router, prefix="/api", tags=["Risk API"])
 
 
 # =========================================================
