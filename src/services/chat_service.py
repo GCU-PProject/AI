@@ -28,7 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
 from src.core.llm import embeddings, get_llm
-from src.models import Law
+from src.models import Country, Law
 from src.services.memory import contextualize_question, save_to_history
 
 logger = logging.getLogger(__name__)
@@ -167,6 +167,46 @@ CHAT_PROMPT = ChatPromptTemplate.from_messages(
 # Document는 page_content(본문)와 metadata(메타데이터)로 구성됩니다.
 
 
+async def resolve_jurisdiction_ids(country_id: int, db: AsyncSession) -> List[int]:
+    """
+    검색 대상 country_id 목록을 구성합니다.
+
+    [목적]
+    사용자가 특정 주(예: 캘리포니아)를 선택하면, 그 주의 법(주법)만이 아니라
+    같은 국가의 연방법도 함께 검색해야 합니다. (연방법 + 주법 통합 검색)
+
+    [규칙]
+    - countries 테이블에서 state_code가 NULL인 행 = 연방(국가 단위)
+    - 사용자가 주(state_code 있음)를 선택하면 → [선택한 주 + 같은 country_code의 연방]
+    - 사용자가 연방(state_code 없음)을 선택하면 → [연방] 단독
+
+    예) 캘리포니아(2, US/CA) 선택 → [2, 1]  (캘리포니아 주법 + 미국 연방법)
+    """
+    row = (
+        await db.execute(select(Country).where(Country.country_id == country_id))
+    ).scalar_one_or_none()
+
+    if row is None:
+        return [country_id]
+
+    ids = [country_id]
+
+    # 주(state)를 선택한 경우, 같은 국가의 연방(state_code IS NULL)을 추가
+    if row.state_code is not None:
+        federal_id = (
+            await db.execute(
+                select(Country.country_id).where(
+                    Country.country_code == row.country_code,
+                    Country.state_code.is_(None),
+                )
+            )
+        ).scalar_one_or_none()
+        if federal_id and federal_id != country_id:
+            ids.append(federal_id)
+
+    return ids
+
+
 async def retrieve_laws(
     query: str, country_id: int, db: AsyncSession
 ) -> tuple[List[Document], List[int]]:
@@ -214,9 +254,13 @@ async def retrieve_laws(
     # - .where(country_id == ...): 특정 국가의 법률만 필터링
     # - .order_by(distance): 거리가 가까운(유사한) 순서로 정렬
     # - .limit(TOP_K): 상위 5개만 가져옴
+    # 연방법 + 주법 통합 검색: 선택한 country_id를 [주 + 연방]으로 확장
+    jurisdiction_ids = await resolve_jurisdiction_ids(country_id, db)
+    logger.info("검색 대상 country_id 목록: %s", jurisdiction_ids)
+
     stmt = (
         select(Law, Law.embedding.l2_distance(query_vector).label("distance"))
-        .where(Law.country_id == country_id)
+        .where(Law.country_id.in_(jurisdiction_ids))
         .order_by(Law.embedding.l2_distance(query_vector))
         .limit(TOP_K)
     )
