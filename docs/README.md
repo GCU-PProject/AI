@@ -55,7 +55,7 @@ Google Vertex AI(Gemini)를 활용하여 답변을 생성하는 서비스입니�
 | **Backend** | FastAPI, Uvicorn |
 | **Database** | PostgreSQL + pgvector (벡터 검색) |
 | **ORM** | SQLAlchemy (Async) |
-| **AI/ML** | Google Vertex AI (Gemini, text-embedding-005), LangChain |
+| **AI/ML** | Google Gemini (gemini-3.5-flash), Qwen3-Embedding-0.6B (자체 호스팅), LangChain |
 | **크롤링** | Requests, BeautifulSoup4 |
 | **Lint/Formatter** | Ruff, Black |
 

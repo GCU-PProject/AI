@@ -35,7 +35,7 @@ GLAW AI는 단순 검색을 넘어 다음과 같은 최적화 기법을 적용�
 
 ### Step 3. 임베딩 및 벡터 DB 저장 (Embedding & Storage)
 - **일반적 방식**: FAISS, Chroma 등의 로컬/인메모리 벡터 저장소 사용.
-- **GLAW AI 적용**: GCP Vertex AI의 `text-embedding-005` 모델을 사용하여 고차원 벡터로 변환 후, 프로덕션 레벨의 **PostgreSQL (`pgvector` 확장)** 에 저장. 메타데이터(국가, 법률 종류) 필터링이 가능하도록 관계형 DB의 장점을 결합함.
+- **GLAW AI 적용**: 자체 호스팅한 `Qwen3-Embedding-0.6B` 모델(1024차원)을 사용하여 고차원 벡터로 변환 후, 프로덕션 레벨의 **PostgreSQL (`pgvector` 확장)** 에 저장. 메타데이터(국가, 법률 종류) 필터링이 가능하도록 관계형 DB의 장점을 결합함.
 
 ### Step 4. 검색기 만들기 (Retrieval)
 - **일반적 방식**: 기본 검색, MMR(다양성 확보), 하이브리드 검색(Ensemble), Reranker(재순위화) 등.

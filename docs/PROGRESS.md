@@ -1,7 +1,7 @@
 # 🌍 GLAW AI - 프로젝트 개발 진행 보고서
 
 > 글로벌 법률 비교 AI 서비스 (RAG 기반)  
-> 최종 수정일: 2026-04-08
+> 최종 수정일: 2026-06-01
 
 ---
 
@@ -27,21 +27,24 @@ GLAW(Global Law) AI는 전 세계 법률 정보를 AI로 검색하고 비교할 
 | 데이터베이스 | PostgreSQL + pgvector | GCP Cloud SQL |
 | ORM | SQLAlchemy (Async) | asyncpg 드라이버 |
 | AI 프레임워크 | LangChain | LCEL 파이프라인 |
-| 임베딩 모델 | Google Vertex AI | text-embedding-005 (768차원) |
-| 생성 모델 (LLM) | Google Gemini | gemini-2.5-flash |
+| 임베딩 모델 | Qwen3-Embedding-0.6B (자체 호스팅) | 1024차원 |
+| 생성 모델 (LLM) | Google Gemini | gemini-3.5-flash |
 | 데이터 수집 | Requests, BeautifulSoup4 | 캘리포니아 법률 크롤링 |
 | 인프라 | GCP (Cloud SQL, VM, Bastion Host) | SSH 터널링 |
 
 ### 1.4 모델 선정 기준
 
-본 프로젝트의 핵심 생성 모델(LLM)로 **`gemini-2.5-flash`**를 채택하였다. 모델 선정 과정에서 다음 요소들을 종합적으로 고려하였다.
+본 프로젝트의 핵심 생성 모델(LLM)로 **`gemini-3.5-flash`**를 채택하였다. 모델 선정 과정에서 다음 요소들을 종합적으로 고려하였다.
 
 1. **안정적인 정식 배포 버전 사용**
    - 테스트용으로 제공되는 프리뷰 버전(AI Studio) 대신, 실제 서비스 환경에서 안정적으로 운영할 수 있는 구글 클라우드(Vertex AI)의 정식 배포 버전을 사용하였다.
 
 2. **객관적인 벤치마크 지표 기반**
    - 법률 AI 전문 벤치마크인 [LegalBench(vals.ai)](https://www.vals.ai/benchmarks/legal_bench)를 참고하였다.
-   - 현재 정식 사용 가능한 모델 중, 정확도와 응답 속도, 토큰 당 비용을 모두 고려했을 때 `gemini-2.5-flash`가 가장 합리적인 성능을 보여 최종 채택하였다.
+   - 현재 정식 사용 가능한 모델 중, 정확도와 응답 속도, 토큰 당 비용을 모두 고려했을 때 `gemini-3.5-flash`가 가장 합리적인 성능을 보여 최종 채택하였다.
+
+3. **임베딩 모델 — Qwen3-Embedding-0.6B 자체 호스팅**
+   - 임베딩 모델은 MTEB 법률 retrieval 벤치마크(`mteb_legal_retrieval_leaderboard.csv`)를 직접 측정하여 선정하였다. `Qwen3-Embedding-0.6B`(0.8677)가 `text-embedding-005`(0.4464) 대비 법률 도메인 정확도가 약 2배 높아, 외부 API 대신 전용 VM에서 직접 서빙(자체 호스팅, 1024차원)하기로 결정하였다. 상세 내용은 `INFRA_DECISION.md` 참고.
 
 ---
 
@@ -96,10 +99,11 @@ GLAW(Global Law) AI는 전 세계 법률 정보를 AI로 검색하고 비교할 
 
 정제된 법률 텍스트를 벡터(숫자 배열)로 변환하였다.
 
-- **사용 모델**: Google Vertex AI `text-embedding-005`
-- **벡터 차원**: 768차원
-- 각 법률 조항의 `content` 필드를 입력으로 하여 768차원의 임베딩 벡터 생성
-- Vertex AI의 API 호출 제한(Rate Limit)을 고려하여 배치 처리 및 대기 시간 적용
+- **사용 모델**: `Qwen3-Embedding-0.6B` (자체 호스팅)
+- **벡터 차원**: 1024차원
+- 각 법률 조항의 `content` 필드를 입력으로 하여 1024차원의 임베딩 벡터 생성
+- instruction 접두사(`"Represent this passage for retrieval: "`) + mean pooling + L2 정규화 적용
+- 쿼리 임베딩(`embed_server.py`)과 동일한 로직을 사용하여 벡터 정합성 보장
 - 출력: 임베딩 벡터가 포함된 `.jsonl` 파일
 
 ### 3.3 DB 적재 (`db_load_law_data.py`)
@@ -108,7 +112,7 @@ GLAW(Global Law) AI는 전 세계 법률 정보를 AI로 검색하고 비교할 
 
 - **데이터베이스**: GCP Cloud SQL (PostgreSQL)
 - **벡터 검색 확장**: pgvector 확장 모듈 사용
-- **테이블 구조**: `laws` 테이블에 법률 메타데이터와 768차원 임베딩 벡터를 함께 저장
+- **테이블 구조**: `laws` 테이블에 법률 메타데이터와 1024차원 임베딩 벡터를 함께 저장
 - **접근 방식**: Bastion Host를 통한 SSH 터널링으로 보안 접근
 
 ### 3.4 데이터베이스 스키마
@@ -140,7 +144,7 @@ GLAW(Global Law) AI는 전 세계 법률 정보를 AI로 검색하고 비교할 
 | `amendment_date` | DateTime | 개정일 |
 | `created_at` | DateTime(timezone=True) | 데이터 생성 시각 |
 | `updated_at` | DateTime(timezone=True) | 데이터 수정 시각 |
-| `embedding` | Vector(768) | 임베딩 벡터 (text-embedding-005) |
+| `embedding` | Vector(1024) | 임베딩 벡터 (Qwen3-Embedding-0.6B) |
 
 ---
 
@@ -155,7 +159,7 @@ GLAW(Global Law) AI는 전 세계 법률 정보를 AI로 검색하고 비교할 
 ```
 사용자 질문 입력
     ↓
-1. 질문 텍스트를 Vertex AI text-embedding-005로 벡터 변환
+1. 질문 텍스트를 Qwen3-Embedding-0.6B(자체 호스팅)로 벡터 변환
     ↓
 2. pgvector의 L2 거리(유클리드 거리) 기반 유사도 검색
    - 조건: 지정된 country_id에 해당하는 법률만 검색
@@ -206,6 +210,9 @@ v1의 수동 구현 방식을 LangChain 프레임워크로 전환하여 다음 �
 
 ### 5.2 v1 → v2 컴포넌트 대응표
 
+> ※ 아래 표는 LangChain 리팩토링 당시(v2) 시점의 기록이다. 임베딩은 이후 Phase에서 `VertexAIEmbeddings` → **자체 호스팅 Qwen3(`RemoteEmbeddings`, HTTP)** 로 교체되었다(`INFRA_DECISION.md` 참고).
+
+
 | 구분 | v1 (직접 구현) | v2 (LangChain) | 변경 이유 |
 |------|---------------|----------------|-----------|
 | 임베딩 | `TextEmbeddingModel.from_pretrained()` | `VertexAIEmbeddings` | LangChain 통합 관리, 초기화 1회 |
@@ -221,7 +228,7 @@ LangChain의 기본 벡터 스토어(`PGVector`)는 자체 테이블 구조를 �
 
 ```python
 async def retrieve_laws(query, country_id, db) -> tuple[List[Document], List[int]]:
-    # 1. LangChain VertexAIEmbeddings로 질문 벡터화
+    # 1. 자체 호스팅 Qwen3 임베딩 서버(RemoteEmbeddings)로 질문 벡터화
     query_vector = embeddings.embed_query(query)
 
     # 2. 기존 SQLAlchemy 쿼리로 L2 거리 기반 검색
