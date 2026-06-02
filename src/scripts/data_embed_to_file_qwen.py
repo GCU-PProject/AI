@@ -50,13 +50,30 @@ model.eval()
 print("✅ 모델 로딩 대성공!")
 
 
-def get_embeddings_qwen(texts):
-    """Qwen3 모델을 사용하여 텍스트 배치의 1024차원 임베딩 추출"""
-    instruction = "Represent this passage for retrieval: "
-    prepared_texts = [instruction + t for t in texts]
+def _last_token_pool(last_hidden_states, attention_mask):
+    """Last-token pooling (Qwen3-Embedding 공식 권장 방식).
 
+    각 문장에서 '마지막 실제 토큰'의 벡터를 문장 표현으로 사용한다.
+    좌측 패딩/우측 패딩 모두를 안전하게 처리한다.
+    """
+    left_padding = attention_mask[:, -1].sum() == attention_mask.shape[0]
+    if left_padding:
+        return last_hidden_states[:, -1]
+    seq_lengths = attention_mask.sum(dim=1) - 1
+    batch_idx = torch.arange(last_hidden_states.shape[0], device=last_hidden_states.device)
+    return last_hidden_states[batch_idx, seq_lengths]
+
+
+def get_embeddings_qwen(texts):
+    """Qwen3 모델로 '문서(passage)' 배치의 1024차원 임베딩을 추출한다.
+
+    [Qwen3 공식 가이드 준수]
+    - 문서(passage)에는 instruction(접두사)을 붙이지 않고 원문 그대로 임베딩한다.
+    - pooling은 last-token pooling을 사용한다.
+    - 질문(query) 임베딩(embed_server.py)에만 Instruct 형식을 적용한다.
+    """
     encoded_input = tokenizer(
-        prepared_texts,
+        texts,  # 문서는 접두사 없이 원문 그대로
         padding=True,
         truncation=True,
         max_length=2048,
@@ -65,22 +82,16 @@ def get_embeddings_qwen(texts):
 
     with torch.no_grad():
         model_output = model(**encoded_input)
-
-        attention_mask = encoded_input["attention_mask"]
         token_embeddings = model_output[0]
+        attention_mask = encoded_input["attention_mask"]
 
-        input_mask_expanded = (
-            attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
-        )
-        sum_embeddings = torch.sum(token_embeddings * input_mask_expanded, 1)
-        sum_mask = torch.clamp(input_mask_expanded.sum(1), min=1e-9)
-
-        embeddings = sum_embeddings / sum_mask
+        # Last-token pooling
+        embeddings = _last_token_pool(token_embeddings, attention_mask)
 
         # L2 정규화 (Cosine Similarity 호환)
         embeddings = F.normalize(embeddings, p=2, dim=1)
 
-    return embeddings.cpu().numpy().tolist()
+    return embeddings.cpu().float().numpy().tolist()
 
 
 def run_embed_pipeline():

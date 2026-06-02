@@ -239,8 +239,8 @@ async def retrieve_laws(
         logger.warning("⚠️ retrieve_laws에 공백만 있는 query가 전달되었습니다.")
         return [], []
 
-    # embed_query()는 텍스트를 768차원 숫자 배열로 변환합니다.
-    # 예: "DUI penalties" → [0.012, -0.034, 0.056, ..., 0.078] (768개)
+    # embed_query()는 텍스트를 1024차원 숫자 배열로 변환합니다. (Qwen3-Embedding-0.6B)
+    # 예: "DUI penalties" → [0.012, -0.034, 0.056, ..., 0.078] (1024개)
     try:
         query_vector = embeddings.embed_query(query_str)
     except Exception as e:
