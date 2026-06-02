@@ -31,12 +31,14 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from src.core.config import settings
 from src.core.database import AsyncSessionLocal
+from src.core.llm import embeddings  # 자체 호스팅 Qwen3 (RemoteEmbeddings)
 from src.models import Law
+from src.models.country import Country
 
 # GCP 인증 환경변수 주입 (config.py의 자동 주입 로직과 동일)
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = settings.GOOGLE_APPLICATION_CREDENTIALS
 
-from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate, load_prompt
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.documents import Document
@@ -68,12 +70,11 @@ MAX_DISTANCE_THRESHOLD = settings.RAG_MAX_DISTANCE_THRESHOLD
 # =========================================================
 # 2. AI 모델 초기화 (chat_service.py와 동일)
 # =========================================================
-embeddings = GoogleGenerativeAIEmbeddings(
-    model="text-embedding-005",
-    project=settings.GCP_PROJECT_ID,
-    location=settings.GCP_LOCATION,
-    vertexai=True,
-)
+# [임베딩] 검색·채점 모두 실제 서비스와 동일한 자체 호스팅 Qwen3(RemoteEmbeddings)로 통일한다.
+# - 검색용: DB의 embedding 컬럼이 Qwen3(1024)로 채워져 있어 반드시 동일 모델이어야 함.
+# - 채점용: MTEB 범용 성능도 Qwen3가 text-embedding-005보다 우수하고,
+#           접두사/풀링 등 임베딩 로직이 임베딩 서버에 동일하게 적용되므로 검색과 일관됨.
+# - LLM은 별도(생성=GCP_MODEL_NAME, 채점=gemini-2.5-pro)로 분리해 채점 편향을 방지한다.
 
 # 답변 생성용 LLM (서비스와 동일한 모델 사용)
 llm = ChatGoogleGenerativeAI(
@@ -126,15 +127,55 @@ async def translate_query(query: str) -> str:
     return translated.strip() if translated else query
 
 
+async def resolve_jurisdiction_ids(country_id: int, db) -> list[int]:
+    """실제 서비스(chat_service.py)와 동일한 연방+주법 통합 검색 로직.
+
+    주(state)를 선택하면 같은 국가의 연방법도 함께 검색한다.
+    예) 캘리포니아(2) → [2, 1] (캘리포니아 주법 + 미국 연방법)
+        캐나다 온타리오(5) → [5, 4] (온타리오 주법 + 캐나다 연방법)
+        미국 연방(1) → [1] 단독
+    """
+    row = (
+        await db.execute(select(Country).where(Country.country_id == country_id))
+    ).scalar_one_or_none()
+
+    if row is None:
+        return [country_id]
+
+    ids = [country_id]
+    if row.state_code is not None:
+        federal_id = (
+            await db.execute(
+                select(Country.country_id).where(
+                    Country.country_code == row.country_code,
+                    Country.state_code.is_(None),
+                )
+            )
+        ).scalar_one_or_none()
+        if federal_id and federal_id != country_id:
+            ids.append(federal_id)
+    return ids
+
+
 async def retrieve_laws(
     query: str, country_id: int, db
 ) -> tuple[list[Document], list[str]]:
-    """벡터 유사도 기반으로 관련 법률 조항을 검색합니다."""
+    """벡터 유사도 기반으로 관련 법률 조항을 검색합니다.
+
+    실제 서비스(chat_service.py)와 동일한 로직:
+    - Qwen3 임베딩으로 질문 벡터화
+    - 주법 선택 시 연방법도 함께 검색 (resolve_jurisdiction_ids)
+    - L2 거리 기반 TOP_K 검색 후 MAX_DISTANCE_THRESHOLD 필터링
+    """
+    # 실제 서비스와 동일한 Qwen3 임베딩으로 질문을 벡터화 (DB와 동일한 벡터 공간)
     query_vector = embeddings.embed_query(query)
+
+    # 연방+주법 통합 검색 (서비스와 동일)
+    jurisdiction_ids = await resolve_jurisdiction_ids(country_id, db)
 
     stmt = (
         select(Law, Law.embedding.l2_distance(query_vector).label("distance"))
-        .where(Law.country_id == country_id)
+        .where(Law.country_id.in_(jurisdiction_ids))
         .order_by(Law.embedding.l2_distance(query_vector))
         .limit(TOP_K)
     )
@@ -183,14 +224,13 @@ def format_docs(docs: list[Document]) -> str:
     return "\n".join(formatted)
 
 
-async def generate_rag_answer(query: str, db) -> tuple[str, list[str]]:
+async def generate_rag_answer(query: str, country_id: int, db) -> tuple[str, list[str]]:
     """
     하나의 질문에 대해 실제 RAG 파이프라인을 실행하여
     (답변, 검색된 컨텍스트 리스트)를 반환합니다.
-    """
-    # country_id=1 (캘리포니아)로 고정
-    country_id = 1
 
+    country_id: 이 질문이 생성된 국가. 실제 서비스처럼 해당 국가 법률만 검색한다.
+    """
     # Step 1: 번역
     translated_query = await translate_query(query)
 
@@ -237,13 +277,17 @@ async def run_evaluation(experiment_name: str):
     responses = []
     retrieved_contexts_list = []
 
+    # country_id 컬럼이 없으면(구버전 CSV) 1로 폴백
+    has_country = "country_id" in df.columns
+
     async with AsyncSessionLocal() as db:
         for idx, row in df.iterrows():
             question = row["user_input"]
-            print(f"   [{idx + 1}/{len(df)}] {question[:50]}...")
+            country_id = int(row["country_id"]) if has_country else 1
+            print(f"   [{idx + 1}/{len(df)}] (country_id={country_id}) {question[:45]}...")
 
             try:
-                answer, contexts = await generate_rag_answer(question, db)
+                answer, contexts = await generate_rag_answer(question, country_id, db)
                 responses.append(answer)
                 retrieved_contexts_list.append(contexts)
             except Exception as e:
