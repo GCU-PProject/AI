@@ -109,16 +109,19 @@ def run_raw_pipeline():
             print(f"📥 Hugging Face에서 '{data_dir}' 다운로드 및 스캔 중...")
             
             # ⭐ [핵심 변경] 국가/주 테이블 신규 ID 매핑 반영 (4, 5, 6번) ⭐
+            # ⚠️ 주의: 부분 문자열(in) 매칭은 "LEGISLATION"에 "ON"이 포함되어
+            #          BC/FED 디렉토리까지 ON으로 오분류되는 버그가 있었음.
+            #          → 디렉토리명 접미사("-FED"/"-ON"/"-BC")로 정확히 매칭한다.
             dir_upper = data_dir.upper()
-            if "FED" in dir_upper:
+            if dir_upper.endswith("-FED"):
                 country_id = 4             # 캐나다 연방 (Federal)
                 jurisdiction_name = "Federal"
                 law_type = "FED"
-            elif "ON" in dir_upper:
+            elif dir_upper.endswith("-ON"):
                 country_id = 5             # 온타리오 주 (Ontario)
                 jurisdiction_name = "Ontario"
                 law_type = "ON"
-            elif "BC" in dir_upper:
+            elif dir_upper.endswith("-BC"):
                 country_id = 6             # 브리티시 컬럼비아 주 (British Columbia)
                 jurisdiction_name = "British Columbia"
                 law_type = "BC"

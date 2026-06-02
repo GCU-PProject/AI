@@ -1,4 +1,5 @@
 import httpx
+from langchain_core.embeddings import Embeddings
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 from src.core.config import settings
@@ -7,9 +8,11 @@ from src.core.config import settings
 # (1) 임베딩 클라이언트: 로컬 Qwen3 임베딩 서버를 HTTP로 호출
 # - 데이터(DB)는 Qwen3-Embedding-0.6B로 임베딩되어 있으므로, 쿼리도 같은 모델로 임베딩해야 함
 # - instruction 접두사 + mean pooling + L2 정규화는 임베딩 서버(embed_server.py)가 처리하므로
-#   여기서는 순수 쿼리 텍스트만 그대로 전달한다 (접두사 중복 부착 금지)
-# - LangChain의 embeddings.embed_query() 인터페이스를 흉내내어 chat_service와 호환 유지
-class RemoteEmbeddings:
+#   여기서는 순수 텍스트만 그대로 전달한다 (접두사 중복 부착 금지)
+# - LangChain의 Embeddings 인터페이스를 상속하여 chat_service / RAGAS 등과 호환 유지
+#   · embed_query(text)        : 단일 쿼리 임베딩 (RAG 검색용)
+#   · embed_documents(texts)   : 다수 문서 임베딩 (RAGAS KnowledgeGraph 구성 등)
+class RemoteEmbeddings(Embeddings):
     def __init__(self, url: str = settings.EMBEDDING_URL):
         self.url = url.rstrip("/")
 
@@ -18,12 +21,18 @@ class RemoteEmbeddings:
         resp.raise_for_status()
         return resp.json()[0]
 
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        # 임베딩 서버는 inputs로 리스트를 받으면 배치로 처리해 벡터 리스트를 반환한다.
+        resp = httpx.post(f"{self.url}/embed", json={"inputs": texts}, timeout=120)
+        resp.raise_for_status()
+        return resp.json()
+
 
 embeddings = RemoteEmbeddings()
 
 
 # (2) LLM (Large Language Model): 답변을 생성하는 AI 모델
-# - 사용 모델: Google Gemini (gemini-2.5-flash)
+# - 사용 모델: Google Gemini (settings.GCP_MODEL_NAME, 예: gemini-3.5-flash)
 # - 용도: 검색된 법률 조항을 근거로 사용자에게 자연어 답변을 생성
 #
 # [파라미터 설명]
