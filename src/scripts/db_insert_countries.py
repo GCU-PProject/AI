@@ -57,6 +57,62 @@ COUNTRIES = [
         "country_name": "Canada",
         "state_name": "British Columbia",
     },
+    {
+        "country_id": 7,
+        "country_code": "AU",
+        "state_code": None,
+        "country_name": "Australia",
+        "state_name": "Federal",
+    },
+    {
+        "country_id": 8,
+        "country_code": "AU",
+        "state_code": "NSW",
+        "country_name": "Australia",
+        "state_name": "New South Wales",
+    },
+    {
+        "country_id": 9,
+        "country_code": "AU",
+        "state_code": "QLD",
+        "country_name": "Australia",
+        "state_name": "Queensland",
+    },
+    {
+        "country_id": 10,
+        "country_code": "AU",
+        "state_code": "WA",
+        "country_name": "Australia",
+        "state_name": "Western Australia",
+    },
+    {
+        "country_id": 11,
+        "country_code": "AU",
+        "state_code": "SA",
+        "country_name": "Australia",
+        "state_name": "South Australia",
+    },
+    {
+        "country_id": 12,
+        "country_code": "AU",
+        "state_code": "TAS",
+        "country_name": "Australia",
+        "state_name": "Tasmania",
+    },
+    {
+        "country_id": 13,
+        "country_code": "AU",
+        "state_code": "NF",
+        "country_name": "Australia",
+        "state_name": "Norfolk Island",
+    },
+    {
+        "country_id": 14,
+        "country_code": "GB",
+        "state_code": None,
+        "country_name": "United Kingdom",
+        "state_name": None,
+    },
 ]
 
 
@@ -92,7 +148,7 @@ def insert_countries() -> None:
             COUNTRIES,
         )
         conn.execute(
-            text("SELECT setval(pg_get_serial_sequence('countries', 'country_id'), 6, true);")
+            text("SELECT setval(pg_get_serial_sequence('countries', 'country_id'), 14, true);")
         )
         rows = conn.execute(
             text(
@@ -104,7 +160,7 @@ def insert_countries() -> None:
             )
         ).all()
 
-    print("✅ Countries 데이터 삽입 성공!")
+    print("[DB Seed] Countries seeded successfully.")
     for row in rows:
         print(f"  {row}")
 
