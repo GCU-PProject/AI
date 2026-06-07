@@ -37,11 +37,6 @@ def get_tokenizer():
 def split_by_tokens(text, max_tokens=MAX_TOKENS, overlap=OVERLAP_TOKENS):
     if not text:
         return []
-    # 성능 최적화: 글자 수가 6000자 미만인 조항은 토큰 수가 2048을 넘지 않으므로
-    # 토크나이저 호출을 생략하고 즉시 반환하여 성능을 수십 배 이상 극대화합니다.
-    if len(text) < 6000:
-        return [text]
-
     if overlap >= max_tokens:
         overlap = max_tokens // 4
 

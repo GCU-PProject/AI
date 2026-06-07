@@ -74,7 +74,7 @@ MAX_DISTANCE_THRESHOLD = settings.RAG_MAX_DISTANCE_THRESHOLD
 # - 검색용: DB의 embedding 컬럼이 Qwen3(1024)로 채워져 있어 반드시 동일 모델이어야 함.
 # - 채점용: MTEB 범용 성능도 Qwen3가 text-embedding-005보다 우수하고,
 #           접두사/풀링 등 임베딩 로직이 임베딩 서버에 동일하게 적용되므로 검색과 일관됨.
-# - LLM은 별도(생성=GCP_MODEL_NAME, 채점=gemini-2.5-pro)로 분리해 채점 편향을 방지한다.
+# - LLM은 별도(생성=GCP_MODEL_NAME, 채점=gemini-3.1-pro-preview)로 분리해 채점 편향을 방지한다.
 
 # 답변 생성용 LLM (서비스와 동일한 모델 사용)
 llm = ChatGoogleGenerativeAI(
@@ -88,9 +88,12 @@ llm = ChatGoogleGenerativeAI(
     top_p=0.7,
 )
 
-# 평가 채점용 LLM (고성능 Pro 모델 사용)
+# 평가 채점용 LLM
+# - 채점 모델은 생성 모델(서비스 답변용 gemini-3.5-flash)보다 성능이 높아야 채점 신뢰도가 확보된다.
+#   ("채점자가 학생보다 똑똑해야 한다") → 생성보다 상위 모델인 gemini-3.1-pro-preview 사용.
+# - 모델 버전은 평가 재현성에 영향을 주므로, 측정 결과 기록 시 채점 모델 버전을 함께 남기는 것을 권장.
 eval_llm = ChatGoogleGenerativeAI(
-    model="gemini-2.5-pro",
+    model="gemini-3.1-pro-preview",
     project=settings.GCP_PROJECT_ID,
     location=settings.GCP_LOCATION,
     vertexai=True,
@@ -277,13 +280,18 @@ async def run_evaluation(experiment_name: str):
     responses = []
     retrieved_contexts_list = []
 
-    # country_id 컬럼이 없으면(구버전 CSV) 1로 폴백
-    has_country = "country_id" in df.columns
+    # 평가셋은 ragas_generate_dataset.py에서 country_id를 항상 포함해 생성된다.
+    # (국가별로 생성 후 태깅) → country_id 컬럼이 없으면 잘못된 데이터이므로 즉시 에러로 알린다.
+    if "country_id" not in df.columns:
+        raise ValueError(
+            "테스트셋에 country_id 컬럼이 없습니다. "
+            "ragas_generate_dataset.py로 다시 생성하세요."
+        )
 
     async with AsyncSessionLocal() as db:
         for idx, row in df.iterrows():
             question = row["user_input"]
-            country_id = int(row["country_id"]) if has_country else 1
+            country_id = int(row["country_id"])
             print(f"   [{idx + 1}/{len(df)}] (country_id={country_id}) {question[:45]}...")
 
             try:

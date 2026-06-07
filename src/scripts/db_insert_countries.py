@@ -62,7 +62,7 @@ COUNTRIES = [
         "country_code": "AU",
         "state_code": None,
         "country_name": "Australia",
-        "state_name": "Federal",
+        "state_name": None,
     },
     {
         "country_id": 8,
@@ -148,7 +148,9 @@ def insert_countries() -> None:
             COUNTRIES,
         )
         conn.execute(
-            text("SELECT setval(pg_get_serial_sequence('countries', 'country_id'), 14, true);")
+            text(
+                "SELECT setval(pg_get_serial_sequence('countries', 'country_id'), 14, true);"
+            )
         )
         rows = conn.execute(
             text(

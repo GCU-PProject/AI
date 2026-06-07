@@ -1,6 +1,5 @@
-import asyncio
 import argparse
-import glob
+import asyncio
 import json
 import os
 import sys
@@ -21,7 +20,14 @@ from src.models import Law
 
 DATABASE_URL = settings.ASYNC_DATABASE_URL
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-DEFAULT_PATTERN = os.path.join(BASE_DIR, "data", "*_Embedded.jsonl")
+
+# 적재할 파일을 여기에 직접 명시한다. (data/ 폴더 기준 파일명)ß
+# 실수로 전체가 적재되는 것을 막기 위해, 비어 있으면 실행되지 않고 에러로 중단된다.
+TARGET_FILES = [
+    "Canada_Law_Data_Embedded.jsonl",
+    "Australia_Law_Data_Embedded.jsonl",
+]
+
 BATCH_SIZE = 1000
 REQUIRED_FIELDS = (
     "country_id",
@@ -48,7 +54,14 @@ def parse_datetime(value: str | None) -> datetime | None:
 
 
 def find_input_files() -> list[str]:
-    return sorted(glob.glob(DEFAULT_PATTERN))
+    # TARGET_FILES에 명시된 파일만 적재한다.
+    # 비어 있으면 의도치 않은 전체 적재를 막기 위해 에러로 중단한다.
+    if not TARGET_FILES:
+        raise ValueError(
+            "TARGET_FILES가 비어 있습니다. 적재할 파일명을 직접 지정하세요. "
+            "(db_load_law_data.py 상단 TARGET_FILES)"
+        )
+    return [os.path.join(BASE_DIR, "data", name) for name in TARGET_FILES]
 
 
 def build_law(row: dict) -> Law | None:
@@ -81,7 +94,7 @@ async def load_law_data(
     files = find_input_files()
 
     if not files:
-        print(f"🚨 Embedded JSONL 파일을 찾을 수 없습니다. (검색 경로: {DEFAULT_PATTERN})")
+        print("🚨 적재할 파일이 없습니다. TARGET_FILES를 확인하세요.")
         await engine.dispose()
         return
 
@@ -146,7 +159,9 @@ async def load_law_data(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="임베딩 완료 법률 JSONL DB 적재")
-    parser.add_argument("--limit", type=int, default=None, help="테스트용 최대 적재 행 수")
+    parser.add_argument(
+        "--limit", type=int, default=None, help="테스트용 최대 적재 행 수"
+    )
     args = parser.parse_args()
 
     if sys.platform == "win32":

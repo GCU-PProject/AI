@@ -11,6 +11,7 @@
 import json
 import os
 import sys
+
 from tqdm import tqdm
 from transformers import AutoTokenizer
 
@@ -21,8 +22,10 @@ sys.path.append(
 
 try:
     from datasets import load_dataset
+
     # 💡 .env 파일 로드를 위한 라이브러리 활성화
     from dotenv import load_dotenv
+
     load_dotenv()
 except ImportError:
     print("🚨 [에러] 'datasets' 라이브러리가 설치되어 있지 않습니다.")
@@ -97,48 +100,51 @@ def run_raw_pipeline():
     jurisdiction_name = "United Kingdom"
     law_type = "FED"
 
-    print(f"📥 Hugging Face에서 'othertales/uklegislation' 다운로드 중...")
-    
+    print("📥 Hugging Face에서 'othertales/uklegislation' 다운로드 중...")
+
     try:
         # 💡 [안정화 수정] 캐나다 방식과 동일하게 딕셔너리로 안전하게 로드 후 검증 우회
         # 13GB 대용량 데이터의 메모리/디스크 오버헤드를 막기 위해 스트리밍(streaming=True)을 필수로 적용합니다.
         dataset_dict = load_dataset(
-            "othertales/uklegislation", 
+            "othertales/uklegislation",
             token=HF_TOKEN,
             verification_mode="no_checks",
-            streaming=True
+            streaming=True,
         )
-        
+
         # 'train' 스플릿이 있으면 쓰고, 없으면 첫 번째 스플릿을 유연하게 매핑
-        split_name = "train" if "train" in dataset_dict else list(dataset_dict.keys())[0]
+        split_name = (
+            "train" if "train" in dataset_dict else list(dataset_dict.keys())[0]
+        )
         dataset = dataset_dict[split_name]
-        
+
         dir_chunk_count = 0
- 
+
         # ⭐ [버그 수정] 파일 쓰기용 f_out 선언 누락 해결 ⭐
         with open(output_filename, "w", encoding="utf-8") as f_out:
-            for row in tqdm(dataset, desc=f"   [{jurisdiction_name}] 실제 정제 진행 중"):
-                
+            for row in tqdm(
+                dataset, desc=f"   [{jurisdiction_name}] 실제 정제 진행 중"
+            ):
                 # 실제 데이터셋 스키마 필드명 매핑 (text_content 사용)
-                body_content = row.get("text_content", "")   
-                section_title = row.get("title", "UK Legislation")  
-                
+                body_content = row.get("text_content", "")
+                section_title = row.get("title", "UK Legislation")
+
                 # 해당 데이터셋은 문서 id나 number를 조항 식별자로 씁니다.
-                art_no = str(row.get("number", "General"))   
-                source_url = row.get("url", "https://www.legislation.gov.au/")
-                
+                art_no = str(row.get("number", "General"))
+                source_url = row.get("url", "https://www.legislation.gov.uk/")
+
                 # 연도 추출 및 날짜 포맷팅
                 year_val = str(row.get("year", "2025"))
                 parsed_date = f"{year_val}-01-01 00:00:00+00:00"
-    
+
                 if not body_content or not str(body_content).strip():
                     continue
-    
+
                 # 캐나다 파이프라인과 100% 동일한 토큰 청킹 프로세스
                 for piece in split_by_tokens(str(body_content)):
                     if not piece.strip():
                         continue
-    
+
                     # 캐나다 결과물과 완벽하게 매치되는 DB Key 구조 생성
                     raw_data = {
                         "country_id": country_id,
@@ -148,13 +154,15 @@ def run_raw_pipeline():
                         "content": piece,
                         "source_url": source_url,
                         "enactment_date": parsed_date,
-                        "amendment_date": parsed_date
+                        "amendment_date": parsed_date,
                     }
-    
-                    f_out.write(json.dumps(raw_data, ensure_ascii=False, default=str) + "\n")
+
+                    f_out.write(
+                        json.dumps(raw_data, ensure_ascii=False, default=str) + "\n"
+                    )
                     dir_chunk_count += 1
                     grand_total_chunks += 1
- 
+
         print(f"   ✅ 처리 완료: {dir_chunk_count:,}개 실제 영국 법률 조항 저장됨.\n")
 
     except Exception as e:

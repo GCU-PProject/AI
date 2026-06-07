@@ -11,13 +11,13 @@ os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = settings.GOOGLE_APPLICATION_CREDE
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 llm = ChatGoogleGenerativeAI(
-    model=settings.GCP_MODEL_NAME,
+    model="gemini-3.1-pro-preview",
     project=settings.GCP_PROJECT_ID,
     location=settings.GCP_LOCATION,
     vertexai=True,
 )
 try:
-    print(f"Testing Model: {settings.GCP_MODEL_NAME} ...")
+    print("Testing Model: gemini-3.1-pro-preview ...")
     res = llm.invoke("hi")
     print("SUCCESS:", res.content)
 except Exception:

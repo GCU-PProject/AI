@@ -1,4 +1,4 @@
-name: Deploy FastAPI
+name: Deploy
 
 # dev 브랜치에 push되면 자동 실행
 on:
@@ -6,7 +6,10 @@ on:
     branches: [dev]
 
 jobs:
-  deploy:
+  # ──────────────────────────────────────────────
+  # 1. FastAPI 서버 배포 (App server)
+  # ──────────────────────────────────────────────
+  deploy-fastapi:
     runs-on: ubuntu-latest
     steps:
       - name: 배스천(Nginx) 경유 FastAPI VM 배포
@@ -17,7 +20,6 @@ jobs:
           username: glawadmin
           key: ${{ secrets.SSH_KEY }}
           # 점프 호스트(배스천): Nginx VM (외부 IP)
-          # .ssh/config의 "ProxyJump glaw-nginx"와 동일한 원리
           proxy_host: 34.22.90.53
           proxy_username: glawadmin
           proxy_key: ${{ secrets.SSH_KEY }}
@@ -26,3 +28,31 @@ jobs:
             cd ~/AI
             git pull origin dev
             sudo systemctl restart fastapi
+
+  # ──────────────────────────────────────────────
+  # 2. 임베딩 서버 배포 (Qwen3 Embedding server)
+  # ──────────────────────────────────────────────
+  # ⚠️ 재시작 시 Qwen3 모델을 다시 로드(수십 초)하므로 그동안 검색이 잠시 멈춘다.
+  #    embed_server.py 등 임베딩 관련 코드가 바뀐 push에서만 의미가 있다.
+  deploy-embedding:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 배스천(Nginx) 경유 임베딩 VM 배포
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          # 최종 접속 대상: 임베딩 VM (내부 IP)
+          host: 10.0.1.5
+          username: glawadmin
+          key: ${{ secrets.SSH_KEY }}
+          # 점프 호스트(배스천): Nginx VM (외부 IP)
+          proxy_host: 34.22.90.53
+          proxy_username: glawadmin
+          proxy_key: ${{ secrets.SSH_KEY }}
+          # 서버에서 실행할 배포 명령
+          # ⚠️ 'embedding'은 임베딩 서버의 systemd 서비스명이다.
+          #    실제 서비스명이 다르면 아래 값을 맞게 수정할 것.
+          #    (확인: sudo systemctl list-units | grep -i embed)
+          script: |
+            cd ~/AI
+            git pull origin dev
+            sudo systemctl restart embedding
