@@ -74,7 +74,7 @@ MAX_DISTANCE_THRESHOLD = settings.RAG_MAX_DISTANCE_THRESHOLD
 # - 검색용: DB의 embedding 컬럼이 Qwen3(1024)로 채워져 있어 반드시 동일 모델이어야 함.
 # - 채점용: MTEB 범용 성능도 Qwen3가 text-embedding-005보다 우수하고,
 #           접두사/풀링 등 임베딩 로직이 임베딩 서버에 동일하게 적용되므로 검색과 일관됨.
-# - LLM은 별도(생성=GCP_MODEL_NAME, 채점=gemini-3.1-pro-preview)로 분리해 채점 편향을 방지한다.
+# - 채점 LLM은 생성과 동일한 모델(GCP_MODEL_NAME)로 고정한다. (아래 채점 모델 근거 참고)
 
 # 답변 생성용 LLM (서비스와 동일한 모델 사용)
 llm = ChatGoogleGenerativeAI(
@@ -88,12 +88,18 @@ llm = ChatGoogleGenerativeAI(
     top_p=0.7,
 )
 
-# 평가 채점용 LLM
-# - 채점 모델은 생성 모델(서비스 답변용 gemini-3.5-flash)보다 성능이 높아야 채점 신뢰도가 확보된다.
-#   ("채점자가 학생보다 똑똑해야 한다") → 생성보다 상위 모델인 gemini-3.1-pro-preview 사용.
-# - 모델 버전은 평가 재현성에 영향을 주므로, 측정 결과 기록 시 채점 모델 버전을 함께 남기는 것을 권장.
+# 평가 채점용 LLM — 생성과 동일한 모델로 고정한다.
+# [근거]
+#  1) 비교 가능성: 채점 모델이 실험마다 바뀌면 점수 변화가 RAG 개선 때문인지
+#     채점자 변경 때문인지 구분 불가. → 처음부터 끝까지 단일 모델로 고정한다.
+#  2) RAGAS 공식 예제도 생성·채점에 동일 모델 사용(gpt-4o):
+#     llm = ChatOpenAI(model="gpt-4o"); evaluator_llm = LangchainLLMWrapper(llm)
+#     공식 문서: "You may choose any model as evaluator LLM for evaluation."
+#     (https://docs.ragas.io/en/stable/getstarted/rag_eval/)
+#  3) 비용: 반복 실험이 많으므로 고비용 모델 대신 생성과 동일한 Flash로 채점한다.
+#  ※ 목적은 절대 점수가 아닌 A/B 상대 비교이므로 self-evaluation bias는 비교에 영향 없음.
 eval_llm = ChatGoogleGenerativeAI(
-    model="gemini-3.1-pro-preview",
+    model=settings.GCP_MODEL_NAME,
     project=settings.GCP_PROJECT_ID,
     location=settings.GCP_LOCATION,
     vertexai=True,

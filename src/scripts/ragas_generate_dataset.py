@@ -71,6 +71,12 @@ DOCS_PER_COUNTRY = 30  # 국가(country_id)별로 추출할 문서 수 (질문 �
 QUESTIONS_PER_COUNTRY = 7  # 국가별 생성 질문 수 → 6개국이면 총 42문제
 OUTPUT_CSV_PATH = "data/ragas_testset.csv"
 
+# 평가 대상 국가(country_id)를 고정한다. → 고정 벤치마크 유지
+# - 미국(1,2,3) + 캐나다(4,5,6)만 평가. 호주(7~13)·영국(14)은 제외.
+# - RAG 개선 시마다 동일한 국가 셋으로 측정해야 점수 비교가 가능하다.
+# - None으로 두면 DB에 존재하는 모든 국가를 사용.
+TARGET_COUNTRY_IDS = [1, 2, 3, 4, 5, 6]
+
 # llm_context: 생성 시 LLM에 주입되는 추가 지시 텍스트 (구버전 language="korean" 대체)
 # - 0.4.x에서는 language 파라미터가 제거됨
 # - 자유 텍스트 슬롯이므로 ① 서비스/사용자 시나리오 ② 한국어 출력 ③ JSON 형식을 함께 지시
@@ -137,7 +143,14 @@ async def generate_dataset():
     if not country_ids:
         print("❌ DB에서 국가 정보를 가져오지 못했습니다. DB 연결/적재 상태를 확인하세요.")
         return
-    print(f"   📚 데이터가 존재하는 국가: {country_ids}")
+
+    # 평가 대상 국가만 남긴다 (고정 벤치마크). TARGET_COUNTRY_IDS=None이면 전체 사용.
+    if TARGET_COUNTRY_IDS is not None:
+        country_ids = [c for c in country_ids if c in TARGET_COUNTRY_IDS]
+        if not country_ids:
+            print(f"❌ 대상 국가({TARGET_COUNTRY_IDS}) 데이터가 DB에 없습니다.")
+            return
+    print(f"   📚 평가 대상 국가: {country_ids}")
 
     # ── LLM / Generator 초기화 (국가 반복과 무관하게 1회만) ──
     print("🧠 [2/4] LLM 및 RAGAS 컴포넌트를 초기화합니다...")
