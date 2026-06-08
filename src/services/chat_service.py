@@ -23,6 +23,7 @@ from typing import Any, Dict, List, Optional
 from langchain_core.documents import Document
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate, load_prompt
+from langsmith import traceable
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -97,6 +98,7 @@ TRANSLATION_PROMPT = ChatPromptTemplate.from_messages(
 )
 
 
+@traceable
 async def translate_query(query: str) -> str:
     """
     사용자의 질문을 영어로 번역합니다. (벡터 검색 정확도 향상 목적)
@@ -167,6 +169,7 @@ CHAT_PROMPT = ChatPromptTemplate.from_messages(
 # Document는 page_content(본문)와 metadata(메타데이터)로 구성됩니다.
 
 
+@traceable
 async def resolve_jurisdiction_ids(country_id: int, db: AsyncSession) -> List[int]:
     """
     검색 대상 country_id 목록을 구성합니다.
@@ -207,6 +210,7 @@ async def resolve_jurisdiction_ids(country_id: int, db: AsyncSession) -> List[in
     return ids
 
 
+@traceable
 async def retrieve_laws(
     query: str, country_id: int, db: AsyncSession
 ) -> tuple[List[Document], List[int]]:
@@ -365,6 +369,7 @@ def _extract_text_from_ai_content(content: Any) -> str:
 # 순차적으로 조합하여 최종 답변을 생성합니다.
 
 
+@traceable
 async def generate_answer(
     query: str, db: AsyncSession, country_id: int, session_id: Optional[str] = None
 ) -> Dict[str, Any]:

@@ -22,11 +22,11 @@ uvicorn src.main:app --reload
 환경변수를 정상적으로 읽을 수 있습니다.
 """
 
-from dotenv import load_dotenv
+from src.core.observability import setup_langsmith
 
 # .env 파일의 환경변수를 OS에 등록 (GCP_PROJECT_ID, DB 접속 정보, 인증키 경로 등)
 # ※ 반드시 다른 모듈을 import하기 전에 호출해야 합니다!
-load_dotenv()
+setup_langsmith()
 
 import logging
 from datetime import datetime, timezone

@@ -37,6 +37,7 @@ eval = [
     "datasets>=4.4.1",
     "pandas>=2.3.3",
     "ragas>=0.4.3",
+    "rapidfuzz>=3.14.5",  # RAGAS 테스트셋 생성(문자열 거리 계산)에 필요한 선택적 의존성
 ]
 mteb = [
     "huggingface-hub>=1.16.0",

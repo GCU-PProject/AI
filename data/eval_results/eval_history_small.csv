@@ -1,0 +1,3 @@
+﻿실행일시,실험명,검색재현율(ContextRecall),근거충실도(Faithfulness),사실정확도(FactualCorrectness)
+2026-06-08 16:20,baseline_no_rag_small,-,-,0.0525
+2026-06-08 16:53,qwen3_rag_small,0.825,0.4704,0.2725

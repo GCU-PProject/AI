@@ -43,6 +43,7 @@ from typing import Any, Dict
 
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.prompts import ChatPromptTemplate, load_prompt
+from langsmith import traceable
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -110,6 +111,7 @@ COMPARE_PROMPT = ChatPromptTemplate.from_messages(
 # 이 함수가 API 엔드포인트(/api/compare)에서 호출되는 최종 진입점입니다.
 
 
+@traceable
 async def compare_laws(
     query: str, db: AsyncSession, country_id_1: int, country_id_2: int
 ) -> Dict[str, Any]:

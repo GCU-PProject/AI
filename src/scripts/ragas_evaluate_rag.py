@@ -13,15 +13,13 @@ Ragas 0.4.x 프레임워크로 자동 채점하여 시스템 성능을 측정합
 [결과 저장 구조]
     data/eval_results/
     ├── eval_history.csv                ← 실행 이력 (한 줄씩 추가)
-    ├── 20260325_baseline.csv           ← 문항별 상세 점수
-    └── 20260328_add_reranker.csv
 """
 
-import sys
-import os
-import asyncio
 import argparse
 import ast
+import asyncio
+import os
+import sys
 from datetime import datetime
 
 import pandas as pd
@@ -29,210 +27,117 @@ import pandas as pd
 # 프로젝트 루트를 sys.path에 추가
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
+from src.core.observability import setup_langsmith
+
+setup_langsmith()
+
 from src.core.config import settings
 from src.core.database import AsyncSessionLocal
 from src.core.llm import embeddings  # 자체 호스팅 Qwen3 (RemoteEmbeddings)
-from src.models import Law
-from src.models.country import Country
+from src.services.chat_service import (
+    CHAT_PROMPT,
+    format_docs,
+    llm,
+    retrieve_laws,
+    translate_query,
+)
 
 # GCP 인증 환경변수 주입 (config.py의 자동 주입 로직과 동일)
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = settings.GOOGLE_APPLICATION_CREDENTIALS
 
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.prompts import ChatPromptTemplate, load_prompt
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.documents import Document
-from sqlalchemy import select
-
 from datasets import Dataset
+from langchain_core.output_parsers import StrOutputParser
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langsmith import traceable
 from ragas import evaluate
+from ragas.embeddings import LangchainEmbeddingsWrapper
+from ragas.llms import LangchainLLMWrapper
 from ragas.metrics import (
-    AnswerCorrectness,
-    AnswerRelevancy,
     ContextPrecision,
     ContextRecall,
+    Faithfulness,
+    FactualCorrectness,
 )
-from ragas.llms import LangchainLLMWrapper
-from ragas.embeddings import LangchainEmbeddingsWrapper
 from ragas.run_config import RunConfig
 
 # =========================================================
 # 1. 설정값
 # =========================================================
+# 평가셋 경로. _manual/_small 평가셋을 쓰면 결과 파일/이력 실험명에도 자동으로 접미사가 붙는다.
+# 전체 평가 시: "data/ragas_testset.csv"
+# 발표용 수동 평가셋: "data/ragas_testset_manual.csv"
+# 축소 평가 시: "data/ragas_testset_small.csv"
 TESTSET_CSV_PATH = "data/ragas_testset.csv"
+
+# 평가셋 종류 → 결과 파일명/이력 실험명에 붙일 접미사
+_TESTSET_BASENAME = os.path.basename(TESTSET_CSV_PATH)
+if "manual" in _TESTSET_BASENAME:
+    NAME_SUFFIX = "_manual"
+elif "small" in _TESTSET_BASENAME:
+    NAME_SUFFIX = "_small"
+else:
+    NAME_SUFFIX = ""
+
 EVAL_RESULTS_DIR = "data/eval_results"
-EVAL_HISTORY_PATH = os.path.join(EVAL_RESULTS_DIR, "eval_history.csv")
-
-# chat_service.py와 동일한 검색 파라미터
-TOP_K = settings.RAG_TOP_K
-MAX_DISTANCE_THRESHOLD = settings.RAG_MAX_DISTANCE_THRESHOLD
-
-# =========================================================
-# 2. AI 모델 초기화 (chat_service.py와 동일)
-# =========================================================
-# [임베딩] 검색·채점 모두 실제 서비스와 동일한 자체 호스팅 Qwen3(RemoteEmbeddings)로 통일한다.
-# - 검색용: DB의 embedding 컬럼이 Qwen3(1024)로 채워져 있어 반드시 동일 모델이어야 함.
-# - 채점용: MTEB 범용 성능도 Qwen3가 text-embedding-005보다 우수하고,
-#           접두사/풀링 등 임베딩 로직이 임베딩 서버에 동일하게 적용되므로 검색과 일관됨.
-# - 채점 LLM은 생성과 동일한 모델(GCP_MODEL_NAME)로 고정한다. (아래 채점 모델 근거 참고)
-
-# 답변 생성용 LLM (서비스와 동일한 모델 사용)
-llm = ChatGoogleGenerativeAI(
-    model=settings.GCP_MODEL_NAME,
-    project=settings.GCP_PROJECT_ID,
-    location=settings.GCP_LOCATION,
-    vertexai=True,
-    temperature=0,
-    max_tokens=4096,
-    top_k=20,
-    top_p=0.7,
+# 이력 로그도 small/full을 분리해 섞이지 않게 한다.
+EVAL_HISTORY_PATH = os.path.join(
+    EVAL_RESULTS_DIR, f"eval_history{NAME_SUFFIX}.csv"
 )
 
-# 평가 채점용 LLM — 생성과 동일한 모델로 고정한다.
+# [채점 모델] 모든 실험에서 항상 gemini-3-flash-preview로 고정한다.
+#   (리걸벤치 기준 법률 분야 정확도가 더 높다고 판단해 채점 기준으로 채택)
+#   (이유는 아래 eval_llm 설명 참고)
+EVAL_LLM_MODEL = "gemini-3-flash-preview"
+
+
+def find_metric_column(df: pd.DataFrame, metric_name: str) -> str:
+    """RAGAS 버전에 따라 metric_name 또는 metric_name(...) 형태로 저장된 컬럼을 찾는다."""
+    candidates = [
+        col
+        for col in df.columns
+        if col == metric_name or col.startswith(f"{metric_name}(")
+    ]
+    if not candidates:
+        raise KeyError(
+            f"RAGAS 결과에서 '{metric_name}' 컬럼을 찾지 못했습니다. "
+            f"실제 컬럼: {list(df.columns)}"
+        )
+    return candidates[0]
+
+# =========================================================
+# 2. AI 모델 초기화
+# =========================================================
+# 답변 생성용 LLM, 번역, 검색, 프롬프트 포맷은 실제 서비스(chat_service.py)를
+# source of truth로 재사용한다. 서비스 로직이 바뀌면 평가도 같은 로직을 따른다.
+# 채점용 임베딩은 검색과 동일한 자체 호스팅 Qwen3(RemoteEmbeddings)로 통일한다.
+
+# 평가 채점용 LLM — 생성 모델(.env의 GCP_MODEL_NAME)과 분리하여 항상 gemini-3-flash-preview로 고정한다.
 # [근거]
-#  1) 비교 가능성: 채점 모델이 실험마다 바뀌면 점수 변화가 RAG 개선 때문인지
-#     채점자 변경 때문인지 구분 불가. → 처음부터 끝까지 단일 모델로 고정한다.
-#  2) RAGAS 공식 예제도 생성·채점에 동일 모델 사용(gpt-4o):
-#     llm = ChatOpenAI(model="gpt-4o"); evaluator_llm = LangchainLLMWrapper(llm)
+#  1) 비교 가능성: 채점 모델이 실험마다 바뀌면 점수 변화가 RAG/생성 모델 개선 때문인지
+#     채점자 변경 때문인지 구분 불가. → .env의 GCP_MODEL_NAME을 baseline/3.5-flash/
+#     3-flash-preview 등으로 바꿔가며 비교 실험을 하더라도 채점자만큼은 절대 바뀌지
+#     않아야 이번 라운드에서 만든 모든 결과를 같은 잣대로 비교할 수 있다.
+#     ⚠️ 채점자를 gemini-3.5-flash → gemini-3-flash-preview로 교체했으므로,
+#     이전 라운드 결과(baseline_no_rag=0.1171, qwen3=0.2993)는 다른 잣대로 잰
+#     수치다. 이번에 baseline부터 다시 측정해 새 라운드 안에서만 비교할 것.
+#  2) 채점자로 gemini-3-flash-preview를 선택한 이유: 리걸벤치 등에서 법률 분야
+#     정확도가 더 높다고 알려진 모델이므로, "법률적으로 옳은지"를 판정하는
+#     채점자 역할에는 생성 모델보다 이쪽이 더 적합하다고 판단했다.
+#  3) RAGAS 공식 예제도 생성·채점에 동일 모델 사용(gpt-4o)을 권장하지만,
+#     "여러 생성 모델을 비교"하는 본 실험에서는 그 원칙을 한 단계 확장해
+#     "채점자를 전 실험 공통 기준으로 고정"하는 쪽이 비교 목적에 더 부합한다.
 #     공식 문서: "You may choose any model as evaluator LLM for evaluation."
 #     (https://docs.ragas.io/en/stable/getstarted/rag_eval/)
-#  3) 비용: 반복 실험이 많으므로 고비용 모델 대신 생성과 동일한 Flash로 채점한다.
 #  ※ 목적은 절대 점수가 아닌 A/B 상대 비교이므로 self-evaluation bias는 비교에 영향 없음.
 eval_llm = ChatGoogleGenerativeAI(
-    model=settings.GCP_MODEL_NAME,
+    model=EVAL_LLM_MODEL,
     project=settings.GCP_PROJECT_ID,
     location=settings.GCP_LOCATION,
     vertexai=True,
     temperature=0,
 )
 
-# =========================================================
-# 3. 프롬프트 로드 (chat_service.py와 동일)
-# =========================================================
-translation_yaml = load_prompt("src/prompts/translation.yaml", encoding="utf-8")
-TRANSLATION_PROMPT = ChatPromptTemplate.from_messages(
-    [
-        ("system", translation_yaml.template),
-        ("human", "{query}"),
-    ]
-)
-
-chat_yaml = load_prompt("src/prompts/chat.yaml", encoding="utf-8")
-CHAT_PROMPT = ChatPromptTemplate.from_messages(
-    [
-        ("system", chat_yaml.template),
-        ("human", "{question}"),
-    ]
-)
-
-
-# =========================================================
-# 4. RAG 파이프라인 함수 (chat_service.py 로직 재사용)
-# =========================================================
-async def translate_query(query: str) -> str:
-    """질문을 영어로 번역합니다."""
-    chain = TRANSLATION_PROMPT | llm | StrOutputParser()
-    translated = await chain.ainvoke({"query": query})
-    return translated.strip() if translated else query
-
-
-async def resolve_jurisdiction_ids(country_id: int, db) -> list[int]:
-    """실제 서비스(chat_service.py)와 동일한 연방+주법 통합 검색 로직.
-
-    주(state)를 선택하면 같은 국가의 연방법도 함께 검색한다.
-    예) 캘리포니아(2) → [2, 1] (캘리포니아 주법 + 미국 연방법)
-        캐나다 온타리오(5) → [5, 4] (온타리오 주법 + 캐나다 연방법)
-        미국 연방(1) → [1] 단독
-    """
-    row = (
-        await db.execute(select(Country).where(Country.country_id == country_id))
-    ).scalar_one_or_none()
-
-    if row is None:
-        return [country_id]
-
-    ids = [country_id]
-    if row.state_code is not None:
-        federal_id = (
-            await db.execute(
-                select(Country.country_id).where(
-                    Country.country_code == row.country_code,
-                    Country.state_code.is_(None),
-                )
-            )
-        ).scalar_one_or_none()
-        if federal_id and federal_id != country_id:
-            ids.append(federal_id)
-    return ids
-
-
-async def retrieve_laws(
-    query: str, country_id: int, db
-) -> tuple[list[Document], list[str]]:
-    """벡터 유사도 기반으로 관련 법률 조항을 검색합니다.
-
-    실제 서비스(chat_service.py)와 동일한 로직:
-    - Qwen3 임베딩으로 질문 벡터화
-    - 주법 선택 시 연방법도 함께 검색 (resolve_jurisdiction_ids)
-    - L2 거리 기반 TOP_K 검색 후 MAX_DISTANCE_THRESHOLD 필터링
-    """
-    # 실제 서비스와 동일한 Qwen3 임베딩으로 질문을 벡터화 (DB와 동일한 벡터 공간)
-    query_vector = embeddings.embed_query(query)
-
-    # 연방+주법 통합 검색 (서비스와 동일)
-    jurisdiction_ids = await resolve_jurisdiction_ids(country_id, db)
-
-    stmt = (
-        select(Law, Law.embedding.l2_distance(query_vector).label("distance"))
-        .where(Law.country_id.in_(jurisdiction_ids))
-        .order_by(Law.embedding.l2_distance(query_vector))
-        .limit(TOP_K)
-    )
-
-    result = await db.execute(stmt)
-    rows = result.all()
-
-    documents = []
-    contexts_text = []
-
-    for row in rows:
-        law = row[0]
-        distance = row[1]
-
-        if distance <= MAX_DISTANCE_THRESHOLD:
-            doc = Document(
-                page_content=law.content,
-                metadata={
-                    "law_id": law.law_id,
-                    "law_type": law.law_type,
-                    "section_title": law.section_title or "",
-                    "article_no": law.article_no,
-                    "distance": distance,
-                },
-            )
-            documents.append(doc)
-            contexts_text.append(law.content)
-
-    return documents, contexts_text
-
-
-def format_docs(docs: list[Document]) -> str:
-    """검색된 Document 리스트를 프롬프트용 텍스트로 변환합니다."""
-    if not docs:
-        return "(관련 법률 정보 없음)"
-
-    formatted = []
-    for doc in docs:
-        meta = doc.metadata
-        formatted.append(
-            f"[{meta['law_type']} {meta['article_no']}]\n"
-            f"- 목차: {meta['section_title']}\n"
-            f"- 내용: {doc.page_content}\n"
-            f"--------------------------------------------------"
-        )
-    return "\n".join(formatted)
-
-
+@traceable
 async def generate_rag_answer(query: str, country_id: int, db) -> tuple[str, list[str]]:
     """
     하나의 질문에 대해 실제 RAG 파이프라인을 실행하여
@@ -244,7 +149,8 @@ async def generate_rag_answer(query: str, country_id: int, db) -> tuple[str, lis
     translated_query = await translate_query(query)
 
     # Step 2: 벡터 검색
-    docs, contexts_text = await retrieve_laws(translated_query, country_id, db)
+    docs, _law_ids = await retrieve_laws(translated_query, country_id, db)
+    contexts_text = [doc.page_content for doc in docs]
 
     # Step 3: 검색 결과 없으면 기본 답변
     if not docs:
@@ -264,6 +170,7 @@ async def generate_rag_answer(query: str, country_id: int, db) -> tuple[str, lis
 # =========================================================
 # 5. 메인 평가 함수
 # =========================================================
+@traceable
 async def run_evaluation(experiment_name: str):
     """
     전체 평가 파이프라인을 실행합니다.
@@ -298,7 +205,9 @@ async def run_evaluation(experiment_name: str):
         for idx, row in df.iterrows():
             question = row["user_input"]
             country_id = int(row["country_id"])
-            print(f"   [{idx + 1}/{len(df)}] (country_id={country_id}) {question[:45]}...")
+            print(
+                f"   [{idx + 1}/{len(df)}] (country_id={country_id}) {question[:45]}..."
+            )
 
             try:
                 answer, contexts = await generate_rag_answer(question, country_id, db)
@@ -340,10 +249,10 @@ async def run_evaluation(experiment_name: str):
     result = evaluate(
         dataset=eval_dataset,
         metrics=[
-            AnswerCorrectness(),
-            AnswerRelevancy(),
-            ContextPrecision(),
             ContextRecall(),
+            ContextPrecision(),
+            Faithfulness(),
+            FactualCorrectness(),
         ],
         llm=LangchainLLMWrapper(eval_llm),
         embeddings=LangchainEmbeddingsWrapper(embeddings),
@@ -357,32 +266,30 @@ async def run_evaluation(experiment_name: str):
     # 결과 디렉토리 생성
     os.makedirs(EVAL_RESULTS_DIR, exist_ok=True)
 
-    # 4-1. 상세 결과 CSV 저장 (문항별 점수)
-    today = datetime.now().strftime("%Y%m%d")
-    detail_filename = f"{today}_{experiment_name}.csv"
-    detail_path = os.path.join(EVAL_RESULTS_DIR, detail_filename)
-
+    # 문항별 상세 결과는 파일로 저장하지 않고, 평균 계산에만 사용한다.
     result_df = result.to_pandas()
-    result_df.to_csv(detail_path, index=False, encoding="utf-8-sig")
-    print(f"   📄 상세 결과: {detail_path}")
 
-    # 4-2. 이력 로그 CSV에 한 줄 추가
+    # 이력 로그 CSV에 한 줄 추가
     # result_df에서 점수 컬럼의 평균을 바로 계산 (가장 단순하고 안전한 방법)
-    metric_cols = [
-        "answer_correctness",
-        "answer_relevancy",
-        "context_precision",
-        "context_recall",
-    ]
-    means = result_df[metric_cols].mean()
+    metric_cols = {
+        "context_recall": find_metric_column(result_df, "context_recall"),
+        "context_precision": find_metric_column(result_df, "context_precision"),
+        "faithfulness": find_metric_column(result_df, "faithfulness"),
+        "factual_correctness": find_metric_column(result_df, "factual_correctness"),
+    }
+    means = result_df[list(metric_cols.values())].mean()
 
     avg_scores = {
         "실행일시": datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "실험명": experiment_name,
-        "정답일치도(AnswerCorrectness)": round(means["answer_correctness"], 4),
-        "답변관련성(AnswerRelevancy)": round(means["answer_relevancy"], 4),
-        "검색정밀도(ContextPrecision)": round(means["context_precision"], 4),
-        "검색재현율(ContextRecall)": round(means["context_recall"], 4),
+        "실험명": f"{experiment_name}{NAME_SUFFIX}",
+        "검색재현율(ContextRecall)": round(means[metric_cols["context_recall"]], 4),
+        "검색정밀도(ContextPrecision)": round(
+            means[metric_cols["context_precision"]], 4
+        ),
+        "근거충실도(Faithfulness)": round(means[metric_cols["faithfulness"]], 4),
+        "사실정확도(FactualCorrectness)": round(
+            means[metric_cols["factual_correctness"]], 4
+        ),
     }
 
     history_df = pd.DataFrame([avg_scores])
@@ -398,10 +305,13 @@ async def run_evaluation(experiment_name: str):
     print("\n" + "=" * 60)
     print(f"🎉 평가 완료! 실험명: {experiment_name}")
     print("=" * 60)
-    for col_name, label in zip(
-        metric_cols, ["정답 일치도", "답변 관련성", "검색 정밀도", "검색 재현율"]
-    ):
-        print(f"   📌 {label}: {round(means[col_name], 4)}")
+    for key, label in [
+        ("context_recall", "검색 재현율"),
+        ("context_precision", "검색 정밀도"),
+        ("faithfulness", "근거 충실도"),
+        ("factual_correctness", "사실 정확도"),
+    ]:
+        print(f"   📌 {label}: {round(means[metric_cols[key]], 4)}")
     print("=" * 60)
 
 
