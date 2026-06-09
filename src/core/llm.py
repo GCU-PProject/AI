@@ -57,5 +57,5 @@ def get_llm(max_output_tokens: int = 4096) -> ChatGoogleGenerativeAI:
         max_tokens=max_output_tokens,
         top_k=20,
         top_p=0.7,
-        thinking_level="low",  # 속도 최적화: default(high) → low (품질 확인 후 조정)
+        # thinking_level="low",  # 속도 최적화: default(high) → low (품질 확인 후 조정)
     )
