@@ -118,12 +118,16 @@ llm = ChatGoogleGenerativeAI(
 )
 
 # 채점용 LLM (모든 실험 공통 — 비교 가능성을 위해 고정, 위 EVAL_LLM_MODEL 설명 참고)
+# thinking 완전 비활성화: claim 분해/NLI는 단순 추출 작업이라 추론이 불필요하고,
+# thinking_level="low"도 호출당 60K+ thinking 토큰을 소비해 비용/시간이 폭발함.
+# thinking_budget=0 → thinking 토큰 0 → 호출당 ~1-2K 토큰으로 정상화.
 eval_llm = ChatGoogleGenerativeAI(
     model=EVAL_LLM_MODEL,
     project=settings.GCP_PROJECT_ID,
     location=settings.GCP_LOCATION,
     vertexai=True,
     temperature=0,
+    thinking_budget=0,
 )
 
 # =========================================================
@@ -156,8 +160,10 @@ async def generate_llm_answer(query: str) -> str:
 # =========================================================
 # 4. 메인 평가 함수
 # =========================================================
-@traceable
-async def run_baseline_evaluation(experiment_name: str):
+async def run_baseline_evaluation(experiment_name: str, limit: int | None = None):
+    if limit is not None and limit < 1:
+        raise ValueError("--limit은 1 이상의 정수여야 합니다.")
+
     print("=" * 60)
     print(f"🚀 Baseline(RAG 미적용) 평가 시작 - 실험명: {experiment_name}")
     print("=" * 60)
@@ -165,6 +171,8 @@ async def run_baseline_evaluation(experiment_name: str):
     # ----- Step 1: 테스트셋 로드 (RAG 버전과 동일한 파일) -----
     print("\n📂 [1/4] 테스트셋을 로드합니다...")
     df = pd.read_csv(TESTSET_CSV_PATH)
+    if limit is not None:
+        df = df.head(limit).copy()
     print(f"   ✅ {len(df)}개 문항 로드 완료")
 
     # ----- Step 2: 순수 LLM 답변 생성 (검색 없음) -----
@@ -190,7 +198,12 @@ async def run_baseline_evaluation(experiment_name: str):
         }
     )
 
-    run_config = RunConfig(max_retries=5, max_wait=120, timeout=300)
+    run_config = RunConfig(
+        max_retries=5,
+        max_wait=300,
+        timeout=3600,
+        max_workers=1,
+    )
     result = evaluate(
         dataset=eval_dataset,
         # 검색이 없으므로 ContextRecall/Faithfulness는 제외하고,
@@ -247,5 +260,11 @@ if __name__ == "__main__":
         default="baseline_no_rag",
         help="실험명 (예: baseline_no_rag)",
     )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="평가할 최대 문항 수 (예: --limit 1)",
+    )
     args = parser.parse_args()
-    asyncio.run(run_baseline_evaluation(args.name))
+    asyncio.run(run_baseline_evaluation(args.name, args.limit))

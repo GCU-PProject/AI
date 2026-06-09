@@ -55,8 +55,8 @@ from ragas.llms import LangchainLLMWrapper
 from ragas.metrics import (
     ContextPrecision,
     ContextRecall,
-    Faithfulness,
     FactualCorrectness,
+    Faithfulness,
 )
 from ragas.run_config import RunConfig
 
@@ -80,9 +80,7 @@ else:
 
 EVAL_RESULTS_DIR = "data/eval_results"
 # 이력 로그도 small/full을 분리해 섞이지 않게 한다.
-EVAL_HISTORY_PATH = os.path.join(
-    EVAL_RESULTS_DIR, f"eval_history{NAME_SUFFIX}.csv"
-)
+EVAL_HISTORY_PATH = os.path.join(EVAL_RESULTS_DIR, f"eval_history{NAME_SUFFIX}.csv")
 
 # [채점 모델] 모든 실험에서 항상 gemini-3-flash-preview로 고정한다.
 #   (리걸벤치 기준 법률 분야 정확도가 더 높다고 판단해 채점 기준으로 채택)
@@ -103,6 +101,7 @@ def find_metric_column(df: pd.DataFrame, metric_name: str) -> str:
             f"실제 컬럼: {list(df.columns)}"
         )
     return candidates[0]
+
 
 # =========================================================
 # 2. AI 모델 초기화
@@ -135,7 +134,11 @@ eval_llm = ChatGoogleGenerativeAI(
     location=settings.GCP_LOCATION,
     vertexai=True,
     temperature=0,
+    thinking_budget=0,
+    # thinking 완전 비활성화: claim 분해/NLI는 단순 추출 작업이라 추론 불필요.
+    # thinking_level="low"도 호출당 60K+ thinking 토큰 소비 → thinking_budget=0으로 차단.
 )
+
 
 @traceable
 async def generate_rag_answer(query: str, country_id: int, db) -> tuple[str, list[str]]:
@@ -170,8 +173,7 @@ async def generate_rag_answer(query: str, country_id: int, db) -> tuple[str, lis
 # =========================================================
 # 5. 메인 평가 함수
 # =========================================================
-@traceable
-async def run_evaluation(experiment_name: str):
+async def run_evaluation(experiment_name: str, limit: int | None = None):
     """
     전체 평가 파이프라인을 실행합니다.
     1. 테스트셋 로드
@@ -179,6 +181,9 @@ async def run_evaluation(experiment_name: str):
     3. Ragas로 채점
     4. 결과 저장
     """
+    if limit is not None and limit < 1:
+        raise ValueError("--limit은 1 이상의 정수여야 합니다.")
+
     print("=" * 60)
     print(f"🚀 RAGAS 평가 시작 - 실험명: {experiment_name}")
     print("=" * 60)
@@ -186,6 +191,8 @@ async def run_evaluation(experiment_name: str):
     # ----- Step 1: 테스트셋 로드 -----
     print("\n📂 [1/4] 테스트셋을 로드합니다...")
     df = pd.read_csv(TESTSET_CSV_PATH)
+    if limit is not None:
+        df = df.head(limit).copy()
     print(f"   ✅ {len(df)}개 문항 로드 완료")
 
     # ----- Step 2: RAG 답변 생성 -----
@@ -244,7 +251,12 @@ async def run_evaluation(experiment_name: str):
     )
 
     # 평가 실행
-    run_config = RunConfig(max_retries=5, max_wait=120, timeout=300)
+    run_config = RunConfig(
+        max_retries=5,
+        max_wait=300,
+        timeout=3600,
+        max_workers=1,
+    )
 
     result = evaluate(
         dataset=eval_dataset,
@@ -326,6 +338,12 @@ if __name__ == "__main__":
         default="unnamed",
         help="실험명 (예: baseline, add_reranker, prompt_tuning_v2)",
     )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="평가할 최대 문항 수 (예: --limit 1)",
+    )
     args = parser.parse_args()
 
-    asyncio.run(run_evaluation(args.name))
+    asyncio.run(run_evaluation(args.name, args.limit))

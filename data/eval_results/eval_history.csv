@@ -1,4 +1,3 @@
 ﻿실행일시,실험명,검색재현율(ContextRecall),검색정밀도(ContextPrecision),근거충실도(Faithfulness),사실정확도(FactualCorrectness)
-2026-06-08 20:46,gemini-3.5-flash-baseline_no_rag,-,-,-,0.1171 # 채점모델 gemini-3.5-flash
-2026-06-08 20:55,gemini-3.5-flash,0.7857,0.6293,0.5098,0.2993  # 채점모델 gemini-3.5-flash
-2026-06-09 00:20,gemini-3-flash-preview-baseline_no_rag,-,-,-,0.2 # 채점모델 gemini-3-flash-preview
+2026-06-09 11:29,base_no_thinking,-,-,-,0.425 # 생성: gemini-3-flash-preview | 채점: gemini-3-flash-preview | thinking_budget=0 |RAG 미적용 
+2026-06-09 11:52,rag_top5,0.8095,0.6798,0.7131,0.3886
