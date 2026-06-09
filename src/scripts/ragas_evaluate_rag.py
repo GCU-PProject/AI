@@ -276,11 +276,6 @@ async def run_evaluation(experiment_name: str, limit: int | None = None):
         experiment_name=f"{experiment_name}{NAME_SUFFIX}",
         evaluation_type="RAG",
         records=latency_records,
-        note=(
-            f"model={settings.GCP_MODEL_NAME}, "
-            f"top_k={settings.RAG_TOP_K}, "
-            f"distance_threshold={settings.RAG_MAX_DISTANCE_THRESHOLD}"
-        ),
     )
 
     # ----- Step 3: Ragas 평가용 Dataset 구성 -----

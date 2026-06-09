@@ -1,3 +1,11 @@
 ﻿실행일시,실험명,검색재현율(ContextRecall),검색정밀도(ContextPrecision),근거충실도(Faithfulness),사실정확도(FactualCorrectness)
+# 고정: 데이터셋=14문항 | 채점=3-flash | 채점추론x | 임베딩=Qwen3-Embedding-0.6B | 생성파라미터=t0/max4096/topk20/topp0.7,,,,,
 2026-06-09 11:29,base_no_thinking,-,-,-,0.425 # 생성: 3-flash| 채점: 3-flash | 추론x | RAG 미적용 
 2026-06-09 11:52,rag_top5,0.8095,0.6798,0.7131,0.3886 # 생성: 3-flash| 채점: 3-flash| 추론x | top5
+2026-06-09 17:24,baseline,-,-,-,0.43 # 생성: 3-flash| 채점: 3-flash | RAG 미적용 
+2026-06-09 17:42,rag_gemini3flash,0.8095,0.6798,0.7076,0.3886 # 생성: 3-flash | 채점: 3-flash | 생성추론: default | top5 | threshold0.90 | prompt: v1
+2026-06-09 18:29,rag_gemini3.1pro,0.7857,0.6857,0.5966,0.4414 # 생성: 3.1-pro | 채점: 3-flash | 생성추론: default | top5 | threshold0.90 | prompt: v1
+2026-06-09 18:42,rag_gemini3.1lite,0.8571,0.6598,0.7168,0.4786 # 생성: 3.1-flash-lite | 채점: 3-flash | 생성추론: default | top5 | threshold0.90 | prompt: v1
+2026-06-09 18:56,rag_gemini3.5flash,0.8095,0.6607,0.6981,0.4207 # 생성: 3.5-flash | 채점: 3-flash | 생성추론: default | top5 | threshold0.90 | prompt: v1
+2026-06-09 19:20,rag_gemini2.5lite,0.7143,0.6631,0.7093,0.3921
+2026-06-09 19:45,rag_gemini3flash_low,0.8095,0.6929,0.7555,0.38

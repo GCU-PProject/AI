@@ -7,11 +7,13 @@ LLM을 이용해 RAGAS 평가용 합성 데이터셋(Synthetic Dataset)을 자�
 
 - LLM: Vertex AI Gemini (gemini-3.5-flash 고정) / Embeddings: 자체 호스팅 Qwen3-Embedding-0.6B
 - 소스 데이터: `laws` 테이블의 실제 법률 조항
-- 목표 데이터셋 크기: 20개 (주당 5개 × 4개 주, 단일 법령 기반)
+- 목표 데이터셋 크기: 30개 (캘리포니아·뉴욕 각 8개, 온타리오·BC 각 7개)
   · 일반 사용자(유학생/여행자) 대상이므로, 조항번호를 직접 지목하는 전문가형 질문을
     만들지 않고 seed 법령 하나로 답할 수 있는 질문만 생성
   · seed 법령 1개당 질문 1개 생성 후 주 country_id 태깅
     → 평가 시 실제 서비스처럼 [주 + 연방] 검색 가능
+  · 생성 실패에 대비해 주별 목표보다 많은 seed 문서를 준비하고, 목표 성공 수를
+    채우면 해당 주의 생성을 중단
 
 [생성 방식]
 - RAGAS TestsetGenerator는 단일 seed 문서에서 sample을 비워 반환하는 경우가 있어,
@@ -38,14 +40,35 @@ from sqlalchemy import select
 
 from src.core.config import settings
 from src.core.database import AsyncSessionLocal
+from src.core.observability import setup_langsmith
 from src.models import Law
+
+setup_langsmith()
+
+from langsmith import traceable
 
 # =========================================================
 # 1. 설정값 (하이퍼파라미터)
 # =========================================================
-QUESTIONS_PER_STATE = 5  # 주별 생성 질문 수 → 4개 주면 총 20문제
+# 주별 목표 성공 문항 수. 총 30문항을 가능한 한 균형 있게 구성한다.
+TARGET_QUESTIONS_BY_STATE = {
+    2: 8,  # California
+    3: 8,  # New York
+    5: 7,  # Ontario
+    6: 7,  # British Columbia
+}
+
+# 생성 실패에 대비한 최종 seed 풀 목표.
+# CA/NY 각 13개, Ontario/BC 각 12개로 맞춘다. 총 50개.
+SEED_POOL_TARGET_BY_STATE = {
+    2: 13,
+    3: 13,
+    5: 12,
+    6: 12,
+}
+
 MAX_GENERATION_RETRIES = 2
-OUTPUT_CSV_PATH = "data/ragas_testset.csv"
+OUTPUT_CSV_PATH = "data/ragas_testset_2.csv"
 RAGAS_LLM_MODEL = "gemini-3.5-flash"
 
 # 평가 대상은 '주(state)' 단위로 고정한다. → 고정 벤치마크 + 실제 서비스 정합
@@ -66,8 +89,9 @@ STATE_TO_FEDERAL = {
 }
 
 # 발표용/고정 평가셋 품질을 높이기 위해 사람이 확인한 좋은 문서를 seed로 먼저 넣는다.
-# - 주제: 음주운전 + 세금/체납 + 노동/임금.
+# - 주제: 교통, 세금, 노동, 주거, 출입국, 소비자 및 일상범죄.
 # - 생성기는 아래 seed 문서만 사용한다. 랜덤 보충 문서는 쓰지 않는다.
+# - 앞쪽에는 우선 사용할 조항, 뒤쪽에는 생성 실패 시 사용할 예비 조항을 둔다.
 SEED_LAW_IDS_BY_STATE = {
     2: [
         806516,  # CA: 21세 미만 BAC 0.01% 이상 운전 금지
@@ -75,6 +99,14 @@ SEED_LAW_IDS_BY_STATE = {
         695385,  # CA: 급여 공제액을 직원 단체에 송금해야 하는 기한
         821691,  # CA: 공공계약 일자리 공고와 지원자 우선 추천
         821788,  # CA: 보조금 산정 시 아동부양비 처리
+        757191,  # CA: 신용 생명·장애 보험 해지와 환급
+        795219,  # CA: 잘못 납부한 세금 환급
+        1052014,  # US FED: 비이민 비자 신청서 7년 보관
+        806012,  # CA: 사고 보고서는 원칙적으로 재판 증거로 사용할 수 없음
+        806014,  # CA: 단순 재산 피해 사고의 경찰 보고서와 과실 판단 제한
+        1006354,  # US FED: 소비자 서비스 계약 조건의 명확한 공개 의무
+        675725,  # CA: RV 공원 임차 종료 시 최소 30일 전 통지
+        1048484,  # US FED: 여권의 기본 유효기간은 발급일부터 10년
     ],
     3: [
         946257,  # NY: BAC 0.08% / 0.18% 음주운전 기준
@@ -82,6 +114,14 @@ SEED_LAW_IDS_BY_STATE = {
         924183,  # NY: 고용주의 임금·근로시간 기록 보존 의무
         979990,  # NY: 근무일 spread of hours 정의
         907120,  # NY: 업무상 부상·질병 후 복직/휴직 보호
+        927618,  # NY: 전자 접근 장치 위조 범죄
+        936475,  # NY: 임대계약에서 출산·자녀 차별 금지
+        1015175,  # US FED: 미국 정부 상대 허위 서류 사기
+        922645,  # NY: 신원 미상 뺑소니 사고 보호에 필요한 신체 접촉 요건
+        935240,  # NY: 이해관계인의 경찰 사고 보고서 열람 권리
+        1051670,  # US FED: 분할 납부 세금의 초과 납부액 처리
+        936472,  # NY: 임대주택 열쇠 복제 비용의 상한
+        944304,  # NY: 특정 목적에 적합한 상품에 대한 묵시적 보증
     ],
     5: [
         1503278,  # Ontario: 초보 운전자 BAC 0 조건
@@ -89,13 +129,27 @@ SEED_LAW_IDS_BY_STATE = {
         1378631,  # Canada FED: 휴가 중 휴직·질병 사유 발생 시 휴가 중단
         1542494,  # Ontario: 소송 지연 시 사건 기각 기준
         1388237,  # Canada FED: 공공부문 노동 조건 판단 요소
+        1439764,  # Canada FED: 주택담보대출 보험 정보 공개
+        1428748,  # Canada FED: 외국인의 공중보건 위험 판단 기준
+        1487400,  # Ontario: 임대인이 후일자 수표나 자동이체를 강제할 수 없음
+        1487401,  # Ontario: 임차인의 요청 시 임대료 영수증 무료 제공
+        1482634,  # Ontario: 채용 공고에서 AI 사용 여부 공개
+        1482734,  # Ontario: 휴직 기간의 고용기간 포함 기준
+        1456793,  # Canada FED: 개인 계좌 잔액 부족 수수료 상한과 예외
     ],
     6: [
         1574088,  # BC: 운전금지 통지 요건
         1574089,  # BC: 운전금지 통지 후 90일 운전금지
-        1361100,  # Canada FED: 세금 체납/출국 우려 시 납부 요구와 압류
+        1423156,  # Canada FED: 일부 외국인의 체류·취업 허가 처리 수수료 면제
         1560922,  # BC: 법정공휴일 근무 시 임금 지급 기준
         1378250,  # Canada FED: 해고된 근로자의 노동 조정 급여 신청
+        1580641,  # BC: 임대료 압류 과정의 위법행위와 손해배상
+        1429183,  # Canada FED: 이민 심사 과정의 문서 제출 방법
+        1596282,  # BC: 사고 피해자의 숙박비 지급·환급 요건
+        1596311,  # BC: 사고 보험금 청구 시 의료 증명서·보고서 제출
+        1596308,  # BC: 사고 후 2년이 지난 보험금 청구의 거절 기준
+        1465902,  # Canada FED: 동일임금 평가 시 근무환경·초과근무 처리
+        1476287,  # Canada FED: 고용보험에서 초과근무 시간 산정 방식
     ],
 }
 
@@ -177,6 +231,10 @@ async def _fetch_seed_laws(state_id: int, jurisdiction_ids: list[int]):
         )
         result = await session.execute(stmt)
         laws = result.scalars().all()
+
+    # SQL IN 조회 결과는 순서가 보장되지 않으므로 seed 목록 순서로 복원한다.
+    laws_by_id = {law.law_id: law for law in laws}
+    laws = [laws_by_id[law_id] for law_id in seed_ids if law_id in laws_by_id]
 
     found_ids = {law.law_id for law in laws}
     missing_ids = [law_id for law_id in seed_ids if law_id not in found_ids]
@@ -277,6 +335,7 @@ async def _generate_sample_for_doc(llm, doc: Document, state_id: int) -> dict | 
     return None
 
 
+@traceable(name="ragas_testset_generation")
 async def generate_dataset():
     print("🚀 [1/4] 평가 대상 주(state) 목록을 확인합니다...")
     async with AsyncSessionLocal() as session:
@@ -289,6 +348,31 @@ async def generate_dataset():
         print(f"❌ 대상 주({TARGET_STATE_IDS}) 데이터가 DB에 없습니다.")
         return
     print(f"   📚 평가 대상 주: {state_ids} (각 주 + 연방법 함께 사용)")
+    print("   📊 주별 seed 풀 / 목표 성공 문항:")
+    for state_id in state_ids:
+        seed_count = len(SEED_LAW_IDS_BY_STATE.get(state_id, []))
+        seed_target = SEED_POOL_TARGET_BY_STATE[state_id]
+        question_target = TARGET_QUESTIONS_BY_STATE[state_id]
+        status = "완료" if seed_count >= seed_target else f"{seed_target - seed_count}개 추가 필요"
+        print(
+            f"      - country_id={state_id}: seed {seed_count}/{seed_target}, "
+            f"목표 문항 {question_target}개 ({status})"
+        )
+    all_seed_ids = [
+        law_id
+        for state_id in state_ids
+        for law_id in SEED_LAW_IDS_BY_STATE.get(state_id, [])
+    ]
+    unique_seed_ids = set(all_seed_ids)
+    print(
+        f"   📦 전체 seed: {len(all_seed_ids)}개 / "
+        f"고유 법령 조항: {len(unique_seed_ids)}개"
+    )
+    if len(all_seed_ids) != len(unique_seed_ids):
+        duplicate_ids = sorted(
+            law_id for law_id in unique_seed_ids if all_seed_ids.count(law_id) > 1
+        )
+        print(f"   ⚠️ 여러 주에 중복 배정된 seed: {duplicate_ids}")
 
     # ── LLM 초기화 (국가 반복과 무관하게 1회만) ──
     print("🧠 [2/4] LLM을 초기화합니다...")
@@ -303,9 +387,9 @@ async def generate_dataset():
     # ── seed 법령 1개당 질문 1개 생성 → 주 country_id 태깅 ──
     print(
         f"⚙️ [3/4] 주별 테스트셋 생성 시작! "
-        f"(주당 {QUESTIONS_PER_STATE}개 → 총 {len(state_ids) * QUESTIONS_PER_STATE}개 목표)"
+        f"(총 {sum(TARGET_QUESTIONS_BY_STATE[state_id] for state_id in state_ids)}개 목표)"
     )
-    print("   - 생성 방식: seed 법령 1개당 질문 1개")
+    print("   - 생성 방식: seed 법령 1개당 질문 1개, 주별 목표 성공 수 도달 시 중단")
 
     all_rows = []
     for state_id in state_ids:
@@ -316,15 +400,18 @@ async def generate_dataset():
             print(f"      ⚠️ seed 문서가 없어 건너뜁니다 (country_id={state_id}).")
             continue
 
-        target_docs = docs[:QUESTIONS_PER_STATE]
-        if len(target_docs) < QUESTIONS_PER_STATE:
+        question_target = TARGET_QUESTIONS_BY_STATE[state_id]
+        if len(docs) < question_target:
             print(
-                f"      ⚠️ 목표 {QUESTIONS_PER_STATE}개보다 seed 문서가 적습니다: "
-                f"{len(target_docs)}개"
+                f"      ⚠️ 목표 {question_target}개보다 seed 문서가 적습니다: "
+                f"{len(docs)}개"
             )
 
         state_count = 0
-        for doc in target_docs:
+        for doc in docs:
+            if state_count >= question_target:
+                break
+
             law_id = doc.metadata["law_id"]
             row = await _generate_sample_for_doc(llm, doc, state_id)
             if row is None:
@@ -335,7 +422,10 @@ async def generate_dataset():
             state_count += 1
             print(f"      ✅ law_id={law_id} 질문 1개 생성")
 
-        print(f"      ✅ 총 {state_count}개 질문 생성 (country_id={state_id})")
+        print(
+            f"      ✅ 총 {state_count}/{question_target}개 질문 생성 "
+            f"(country_id={state_id})"
+        )
 
     if not all_rows:
         print("\n❌ 생성된 질문이 없습니다.")

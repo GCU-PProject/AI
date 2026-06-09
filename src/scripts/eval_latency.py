@@ -24,7 +24,6 @@ LATENCY_HISTORY_COLUMNS = [
     "P95총응답시간(초)",
     "최소총응답시간(초)",
     "최대총응답시간(초)",
-    "비고",
 ]
 
 
@@ -40,7 +39,6 @@ def append_latency_history(
     experiment_name: str,
     evaluation_type: str,
     records: list[LatencyRecord],
-    note: str,
 ) -> None:
     """Append aggregate user-response latency statistics to the history CSV.
 
@@ -83,7 +81,6 @@ def append_latency_history(
         "성공수": len(successful),
         "실패수": failed_count,
         **latency_stats,
-        "비고": note,
     }
 
     os.makedirs(os.path.dirname(LATENCY_HISTORY_PATH), exist_ok=True)

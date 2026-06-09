@@ -217,7 +217,6 @@ async def run_baseline_evaluation(experiment_name: str, limit: int | None = None
         experiment_name=f"{experiment_name}{NAME_SUFFIX}",
         evaluation_type="Baseline",
         records=latency_records,
-        note=f"model={settings.GCP_MODEL_NAME}, RAG 미적용",
     )
 
     # ----- Step 3: RAGAS 채점 (Baseline/RAG 공통 비교 지표만) -----
