@@ -13,6 +13,7 @@ Ragas 0.4.x 프레임워크로 자동 채점하여 시스템 성능을 측정합
 [결과 저장 구조]
     data/eval_results/
     ├── eval_history.csv                ← 실행 이력 (한 줄씩 추가)
+    └── latency_history.csv             ← 실제 응답시간 이력 (한 줄씩 추가)
 """
 
 import argparse
@@ -20,6 +21,7 @@ import ast
 import asyncio
 import os
 import sys
+import time
 from datetime import datetime
 
 import pandas as pd
@@ -34,6 +36,7 @@ setup_langsmith()
 from src.core.config import settings
 from src.core.database import AsyncSessionLocal
 from src.core.llm import embeddings  # 자체 호스팅 Qwen3 (RemoteEmbeddings)
+from src.scripts.eval_latency import LatencyRecord, append_latency_history
 from src.services.chat_service import (
     CHAT_PROMPT,
     format_docs,
@@ -141,33 +144,62 @@ eval_llm = ChatGoogleGenerativeAI(
 
 
 @traceable
-async def generate_rag_answer(query: str, country_id: int, db) -> tuple[str, list[str]]:
+async def generate_rag_answer(
+    query: str, country_id: int, db
+) -> tuple[str, list[str], LatencyRecord]:
     """
     하나의 질문에 대해 실제 RAG 파이프라인을 실행하여
-    (답변, 검색된 컨텍스트 리스트)를 반환합니다.
+    (답변, 검색된 컨텍스트 리스트, 단계별 응답시간)를 반환합니다.
 
     country_id: 이 질문이 생성된 국가. 실제 서비스처럼 해당 국가 법률만 검색한다.
     """
+    total_started_at = time.perf_counter()
+
     # Step 1: 번역
+    started_at = time.perf_counter()
     translated_query = await translate_query(query)
+    translation_time = time.perf_counter() - started_at
 
     # Step 2: 벡터 검색
+    started_at = time.perf_counter()
     docs, _law_ids = await retrieve_laws(translated_query, country_id, db)
+    retrieval_time = time.perf_counter() - started_at
     contexts_text = [doc.page_content for doc in docs]
 
     # Step 3: 검색 결과 없으면 기본 답변
     if not docs:
+        total_time = time.perf_counter() - total_started_at
         return (
             "죄송합니다. 질문하신 내용과 관련된 정확한 법률 정보를 찾을 수 없습니다.",
             [],
+            {
+                "translation": translation_time,
+                "retrieval": retrieval_time,
+                "generation": 0.0,
+                "total": total_time,
+                "success": True,
+            },
         )
 
     # Step 4: 답변 생성
     context = format_docs(docs)
     chain = CHAT_PROMPT | llm | StrOutputParser()
+    started_at = time.perf_counter()
     answer = await chain.ainvoke({"context": context, "question": query})
+    generation_time = time.perf_counter() - started_at
+    total_time = time.perf_counter() - total_started_at
 
-    return answer, contexts_text
+    return (
+        answer,
+        contexts_text,
+        {
+            "translation": translation_time,
+            "retrieval": retrieval_time,
+            "generation": generation_time,
+            "total": total_time,
+            "success": True,
+        },
+    )
 
 
 # =========================================================
@@ -199,6 +231,7 @@ async def run_evaluation(experiment_name: str, limit: int | None = None):
     print("\n🤖 [2/4] 각 질문에 대해 RAG 답변을 생성합니다...")
     responses = []
     retrieved_contexts_list = []
+    latency_records: list[LatencyRecord] = []
 
     # 평가셋은 ragas_generate_dataset.py에서 country_id를 항상 포함해 생성된다.
     # (국가별로 생성 후 태깅) → country_id 컬럼이 없으면 잘못된 데이터이므로 즉시 에러로 알린다.
@@ -216,14 +249,39 @@ async def run_evaluation(experiment_name: str, limit: int | None = None):
                 f"   [{idx + 1}/{len(df)}] (country_id={country_id}) {question[:45]}..."
             )
 
+            request_started_at = time.perf_counter()
             try:
-                answer, contexts = await generate_rag_answer(question, country_id, db)
+                answer, contexts, latency = await generate_rag_answer(
+                    question, country_id, db
+                )
                 responses.append(answer)
                 retrieved_contexts_list.append(contexts)
+                latency_records.append(latency)
             except Exception as e:
                 print(f"   ⚠️ 오류 발생 (건너뜀): {e}")
                 responses.append("오류로 인해 답변을 생성할 수 없었습니다.")
                 retrieved_contexts_list.append([])
+                latency_records.append(
+                    {
+                        "translation": 0.0,
+                        "retrieval": 0.0,
+                        "generation": 0.0,
+                        "total": time.perf_counter() - request_started_at,
+                        "success": False,
+                    }
+                )
+
+    print("\n⏱️ 실제 사용자 응답시간을 저장합니다...")
+    append_latency_history(
+        experiment_name=f"{experiment_name}{NAME_SUFFIX}",
+        evaluation_type="RAG",
+        records=latency_records,
+        note=(
+            f"model={settings.GCP_MODEL_NAME}, "
+            f"top_k={settings.RAG_TOP_K}, "
+            f"distance_threshold={settings.RAG_MAX_DISTANCE_THRESHOLD}"
+        ),
+    )
 
     # ----- Step 3: Ragas 평가용 Dataset 구성 -----
     print("\n📊 [3/4] Ragas 평가를 실행합니다...")

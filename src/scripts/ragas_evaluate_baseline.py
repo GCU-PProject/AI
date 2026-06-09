@@ -19,12 +19,14 @@ RAGAS로 채점한다. RAG 적용 버전(ragas_evaluate_rag.py)과 비교하여
 [결과 저장]
     data/eval_results/
     ├── eval_history.csv          ← 실행 이력 (RAG 버전과 공유, 한 줄 추가)
+    └── latency_history.csv       ← 실제 응답시간 이력 (RAG 버전과 공유)
 """
 
 import argparse
 import asyncio
 import os
 import sys
+import time
 from datetime import datetime
 
 import pandas as pd
@@ -36,6 +38,7 @@ from src.core.observability import setup_langsmith
 setup_langsmith()
 
 from src.core.config import settings
+from src.scripts.eval_latency import LatencyRecord, append_latency_history
 
 # GCP 인증 환경변수 주입
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = settings.GOOGLE_APPLICATION_CREDENTIALS
@@ -178,15 +181,44 @@ async def run_baseline_evaluation(experiment_name: str, limit: int | None = None
     # ----- Step 2: 순수 LLM 답변 생성 (검색 없음) -----
     print("\n🤖 [2/4] 각 질문에 순수 LLM(검색 없음)으로 답변을 생성합니다...")
     responses = []
+    latency_records: list[LatencyRecord] = []
     for idx, row in df.iterrows():
         question = row["user_input"]
         print(f"   [{idx + 1}/{len(df)}] {str(question)[:45]}...")
+        started_at = time.perf_counter()
         try:
             answer = await generate_llm_answer(question)
+            elapsed = time.perf_counter() - started_at
             responses.append(answer)
+            latency_records.append(
+                {
+                    "translation": 0.0,
+                    "retrieval": 0.0,
+                    "generation": elapsed,
+                    "total": elapsed,
+                    "success": True,
+                }
+            )
         except Exception as e:
             print(f"   ⚠️ 오류 발생 (건너뜀): {e}")
             responses.append("오류로 인해 답변을 생성할 수 없었습니다.")
+            latency_records.append(
+                {
+                    "translation": 0.0,
+                    "retrieval": 0.0,
+                    "generation": 0.0,
+                    "total": time.perf_counter() - started_at,
+                    "success": False,
+                }
+            )
+
+    print("\n⏱️ 실제 사용자 응답시간을 저장합니다...")
+    append_latency_history(
+        experiment_name=f"{experiment_name}{NAME_SUFFIX}",
+        evaluation_type="Baseline",
+        records=latency_records,
+        note=f"model={settings.GCP_MODEL_NAME}, RAG 미적용",
+    )
 
     # ----- Step 3: RAGAS 채점 (Baseline/RAG 공통 비교 지표만) -----
     print("\n📊 [3/4] RAGAS 평가를 실행합니다 (FactualCorrectness만)...")
