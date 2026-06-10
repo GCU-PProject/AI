@@ -45,8 +45,15 @@ Google Vertex AI(Gemini)를 활용하여 답변을 생성하는 서비스입니�
 
 | country_id | 국가 | 주/지역 |
 |------------|------|---------|
-| 1 | United States (US) | California (CA) |
-| 2 | Canada (CA) | - |
+| 1 | United States (US) | 연방 |
+| 2 | United States (US) | California (CA) |
+| 3 | United States (US) | New York (NY) |
+| 4 | Canada (CA) | 연방 |
+| 5 | Canada (CA) | Ontario (ON) |
+| 6 | Canada (CA) | British Columbia (BC) |
+
+> 주(state)를 선택하면 해당 주법 + 같은 국가의 연방법을 함께 검색합니다.
+> (예: country_id=2 캘리포니아 → [2, 1] 검색)
 
 ## 🛠 기술 스택
 
@@ -55,7 +62,7 @@ Google Vertex AI(Gemini)를 활용하여 답변을 생성하는 서비스입니�
 | **Backend** | FastAPI, Uvicorn |
 | **Database** | PostgreSQL + pgvector (벡터 검색) |
 | **ORM** | SQLAlchemy (Async) |
-| **AI/ML** | Google Gemini (gemini-3.5-flash), Qwen3-Embedding-0.6B (자체 호스팅), LangChain |
+| **AI/ML** | Google Gemini (생성), Cloud Translation LLM (질문 번역), Qwen3-Embedding-0.6B (자체 호스팅 임베딩), LangChain |
 | **크롤링** | Requests, BeautifulSoup4 |
 | **Lint/Formatter** | Ruff, Black |
 
@@ -86,7 +93,6 @@ GLAW/AI/
 │   ├── prompts/              # LLM 프롬프트 (YAML)
 │   │   ├── chat.yaml              # Q&A 답변 생성 프롬프트
 │   │   ├── compare.yaml           # 비교 분석 프롬프트
-│   │   ├── translation.yaml       # 질문 번역 프롬프트
 │   │   ├── contextualize.yaml     # 질문 재구성 프롬프트
 │   │   ├── risk_card_topics.yaml  # 리스크 주제 생성 프롬프트 (스크립트용)
 │   │   └── risk_card_content.yaml # 리스크 본문 생성 프롬프트 (스크립트용)
@@ -175,14 +181,14 @@ uvicorn src.main:app --reload
 2. 가공 (data_process_us_ca.py)
    → 조항 단위로 분리, 정제
 
-3. 임베딩 (data_embed_to_file.py)
-   → Vertex AI로 텍스트 → 벡터 변환
+3. 임베딩 (data_embed_to_file_qwen.py)
+   → Qwen3-Embedding-0.6B (자체 호스팅)로 텍스트 → 1024차원 벡터 변환
 
 4. DB 적재 (db_load_law_data.py)
-   → PostgreSQL + pgvector에 저장
+   → PostgreSQL + pgvector에 저장 (HNSW 인덱스)
 
 5. 검색 (chat_service.py)
-   → 질문 임베딩 → L2 거리 기반 유사 법률 검색 → Gemini로 답변 생성
+   → 질문 번역(Cloud Translation) → 질문 임베딩 → L2 거리 기반 유사 법률 검색 → Gemini로 답변 생성
 ```
 
 ## 👥 팀원

@@ -9,24 +9,27 @@ RAG 검색 설정과 생성 모델을 변경하며 검색 품질, 답변 품질,
 
 모든 실험에서 다음 조건을 동일하게 유지한다.
 
-- 평가 데이터셋: `data/ragas_testset.csv`
+- 평가 데이터셋: `data/ragas_testset_2.csv` (30문항)
 - 채점 모델: `gemini-3-flash-preview`
 - 채점 모델 추론: `thinking_budget=0`
 - 임베딩 모델: `Qwen3-Embedding-0.6B`
+- 질문 번역: Cloud Translation LLM (`general/translation-llm`) — 생성 모델과 분리·고정
 - 검색 범위: 선택한 주법 + 해당 국가 연방법
+- 검색 인덱스: HNSW (`vector_l2_ops`)
 - 생성 파라미터: `temperature=0`, `max_tokens=4096`, `top_k=20`, `top_p=0.7`
 
 채점 모델은 생성 모델보다 작더라도 실험 간 비교를 위해 고정한다.
 
 ## 조정할 항목
 
-다음 순서로 하나씩 변경하며 평가한다.
+다음 순서로 하나씩 변경하며 평가한다. (모델 특성이 상류이므로 추론 수준 → 검색 파라미터 순)
 
-1. 검색 문서 수: `RAG_TOP_K` (`3`, `5`, `7`)
-2. 검색 거리 임계값: `RAG_MAX_DISTANCE_THRESHOLD` (`0.80`, `0.85`, `0.90`)
-3. 생성 모델: `.env`의 `GCP_MODEL_NAME`
-4. 서비스 답변 생성 추론 수준: `minimal`, `low`, `medium`
-5. 답변 프롬프트: 길이, 근거 사용 강도, 추측 방지 규칙, 답변 형식
+1. 서비스 답변 생성 추론 수준: `thinking_budget=0`(비활성), `thinking_level` `low`/`medium` — lite 모델은 thinking 미지원이라 해당 없음
+2. 생성 모델: `.env`의 `GCP_MODEL_NAME`
+3. 검색 문서 수: `RAG_TOP_K` (`3`, `5`, `7`)
+4. 검색 거리 임계값: `RAG_MAX_DISTANCE_THRESHOLD` (`0.80`, `0.85`, `0.90`)
+5. HNSW 탐색 폭: `hnsw.ef_search` (기본 40 — 재현율 하락 시 100으로 상향)
+6. 답변 프롬프트: 길이, 근거 사용 강도, 추측 방지 규칙, 답변 형식
 
 생성용 `top_k`, `top_p`는 검색 문서 수를 의미하는 `RAG_TOP_K`와 다르다.
 법률 답변의 일관성과 실험 해석을 위해 생성 파라미터는 우선 고정한다.
@@ -63,7 +66,7 @@ RAGAS 채점시간은 사용자 응답시간에 포함하지 않는다.
 - 성공/실패 문항 수
 
 개별 요청 분석은 LangSmith를 사용하고, 실험 간 비교 결과는
-`data/eval_results/latency_history.csv`에 기록한다.
+`data/eval_results/latency_history_30.csv`에 기록한다 (점수는 `eval_history_30.csv`).
 시간 통계는 성공한 요청만으로 계산하며, 전체 문항 수와 실패 문항 수는 별도로 기록한다.
 
 응답시간은 `ragas_evaluate_rag.py`와 `ragas_evaluate_baseline.py` 실행 시
@@ -90,11 +93,11 @@ uv run python src/scripts/ragas_evaluate_rag.py --name final_rag_k5_d090
 ## 추천 실험 순서
 
 ```text
-TOP_K 3/5/7 비교
+추론 수준 비교 (모델 특성 확정)
+→ 생성 모델 비교 및 확정
+→ TOP_K 3/5/7 비교
 → 거리 임계값 0.80/0.85/0.90 비교
-→ 생성 모델 비교
-→ 서비스 추론 수준 비교
-→ 프롬프트 개선
+→ 프롬프트 개선 (답변 형식이 바뀌므로 프론트 연동 일정 고려)
 → 최종 설정 전체 평가
 ```
 

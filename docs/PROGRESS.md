@@ -254,24 +254,17 @@ v1: 한국어 질문 → 임베딩 → 검색 → 답변
 v2: 한국어 질문 → [영어 번역] → 임베딩 → 검색 → 답변 (원본 질문 사용)
 ```
 
-번역에는 별도 API가 아닌 기존 LLM(Gemini)을 활용하며, 추가 비용 없이 기존 인프라를 재사용한다.
-
-> **2026-06-10 변경 결정:** 번역 품질을 우선하기 위해 검색용 질문 번역을
-> Google Cloud Translation LLM(`general/translation-llm`)으로 분리할 예정이다.
-> 외부 평가, Google 공식 가이드, 선택 한계 및 자체 검증 계획은
-> [`TRANSLATION_MODEL_DECISION.md`](TRANSLATION_MODEL_DECISION.md)에 정리하였다.
+초기에는 기존 생성 LLM을 번역에도 재사용하였다. 이후 번역 조건을 생성 모델과 분리하고
+검색 품질을 안정적으로 비교하기 위해 Google Cloud Translation LLM
+(`general/translation-llm`)으로 교체하였다. 외부 평가, Google 공식 가이드,
+선택 한계 및 자체 검증 계획은
+[`TRANSLATION_MODEL_DECISION.md`](TRANSLATION_MODEL_DECISION.md)에 정리하였다.
 
 ```python
-translation_prompt = ChatPromptTemplate.from_messages([
-    ("system", "You are a translator. Translate the user's message to English. "
-               "Output ONLY the translated text, nothing else. "
-               "If the message is already in English, return it as-is."),
-    ("human", "{query}"),
-])
-
 async def translate_query(query: str) -> str:
-    chain = translation_prompt | llm | StrOutputParser()
-    return await chain.ainvoke({"query": query})
+    if not HANGUL_PATTERN.search(query):
+        return query.strip()
+    return await asyncio.to_thread(_translate_query_sync, query)
 ```
 
 ### 5.5 프롬프트 엔지니어링
@@ -323,7 +316,6 @@ src/
 ├── prompts/                   # LLM 프롬프트 (YAML 외부화)
 │   ├── chat.yaml              # Q&A 답변 생성
 │   ├── compare.yaml           # 비교 분석
-│   ├── translation.yaml       # 질문 번역
 │   ├── contextualize.yaml     # 질문 재구성
 │   ├── risk_card_topics.yaml  # 리스크 주제 생성 (스크립트용)
 │   └── risk_card_content.yaml # 리스크 본문 생성 (스크립트용)

@@ -17,11 +17,14 @@ LCEL(LangChain Expression Language) 파이프라인으로 연결합니다.
     → 5단계: LLM(Gemini)이 근거 자료 기반으로 답변 생성
     → 6단계: API 응답 반환
 """
+import asyncio
+import html
 import logging
+import re
 from typing import Any, Dict, List, Optional
 
+from google.cloud import translate_v3
 from langchain_core.documents import Document
-from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate, load_prompt
 from langsmith import traceable
 from sqlalchemy import select
@@ -80,22 +83,34 @@ llm = get_llm()
 #                                                  ↓
 #               원본 한국어 질문 + 검색 결과 → LLM → 한국어 답변 생성
 #
-# [비용] 별도 번역 API 없이 기존 LLM(Gemini)을 재사용하므로 추가 비용 없음
+# [모델] Google Cloud Translation LLM(general/translation-llm)을 사용합니다.
+# 번역 모델을 답변 생성 모델과 분리하여, 생성 모델 비교 실험에서도 검색 조건을 고정합니다.
 
-# 번역용 프롬프트 템플릿
-# - ChatPromptTemplate: LangChain에서 프롬프트를 관리하는 클래스
-# - from_messages(): 대화 형식(system/human)으로 프롬프트를 구성
-# - system 메시지: AI의 역할과 규칙을 정의
-# - human 메시지: 사용자의 입력. {query}는 실행 시 실제 질문으로 치환됨
-
-translation_yaml = load_prompt("src/prompts/translation.yaml", encoding="utf-8")
-
-TRANSLATION_PROMPT = ChatPromptTemplate.from_messages(
-    [
-        ("system", translation_yaml.template),
-        ("human", "{query}"),
-    ]
+translation_client = translate_v3.TranslationServiceClient()
+TRANSLATION_PARENT = (
+    f"projects/{settings.GCP_PROJECT_ID}/locations/{settings.GCP_TRANSLATION_LOCATION}"
 )
+TRANSLATION_MODEL_PATH = (
+    f"{TRANSLATION_PARENT}/models/{settings.GCP_TRANSLATION_MODEL}"
+)
+HANGUL_PATTERN = re.compile(r"[가-힣]")
+
+
+def _translate_query_sync(query: str) -> str:
+    """Cloud Translation 동기 클라이언트로 한국어 질문을 영어로 번역합니다."""
+    response = translation_client.translate_text(
+        request={
+            "parent": TRANSLATION_PARENT,
+            "contents": [query],
+            "mime_type": "text/plain",
+            "source_language_code": "ko",
+            "target_language_code": "en",
+            "model": TRANSLATION_MODEL_PATH,
+        }
+    )
+    if not response.translations:
+        raise ValueError("번역 결과가 없습니다.")
+    return html.unescape(response.translations[0].translated_text)
 
 
 @traceable
@@ -105,25 +120,19 @@ async def translate_query(query: str) -> str:
 
     - 이미 영어인 경우 그대로 반환합니다.
     - 번역 결과는 검색에만 사용되며, 최종 답변 생성에는 원본 질문이 사용됩니다.
-
-    LCEL 파이프라인 설명:
-        translation_prompt | llm | StrOutputParser()
-        (프롬프트 생성)   → (LLM 호출) → (응답에서 텍스트만 추출)
-        이 파이프라인은 | (파이프) 연산자로 각 단계를 연결합니다.
-        데이터가 왼쪽에서 오른쪽으로 순차적으로 흐릅니다.
     """
-    chain = TRANSLATION_PROMPT | llm | StrOutputParser()
-    translated_res = await chain.ainvoke({"query": query})
-    
-    # [중요] 최신 LangChain 버전에서 StrOutputParser()의 출력이 문자열이 아닌
-    # TextAccessor 객체로 반환될 수 있습니다. 이를 순수 str 자료형으로 강제 변환해주어야
-    # 임베딩 라이브러리(GoogleGenerativeAIEmbeddings)에서 'Empty instances' 에러가 나는 것을 방지할 수 있습니다.
-    translated = str(translated_res)
-    
+    if not query or not query.strip():
+        raise ValueError("번역할 질문이 없습니다.")
+
+    if not HANGUL_PATTERN.search(query):
+        return query.strip()
+
+    translated = await asyncio.to_thread(_translate_query_sync, query)
+
     if not translated or not translated.strip():
         raise ValueError("번역 결과가 없습니다.")
     logger.info("번역 완료: '%s' → '%s'", query, translated)
-    return translated
+    return translated.strip()
 
 
 # =========================================================

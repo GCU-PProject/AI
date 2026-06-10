@@ -48,6 +48,12 @@ class Settings(BaseSettings):
     GOOGLE_APPLICATION_CREDENTIALS: str  # 서비스 계정 키 파일 경로 (예: keys/xxx.json)
 
     # =============================================
+    # GCP Cloud Translation 설정
+    # =============================================
+    GCP_TRANSLATION_LOCATION: str = "us-central1"
+    GCP_TRANSLATION_MODEL: str = "general/translation-llm"
+
+    # =============================================
     # CORS 설정
     # =============================================
     # 예: CORS_ALLOW_ORIGINS=https://app.example.com,https://www.example.com

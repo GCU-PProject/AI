@@ -69,7 +69,8 @@ Nginx(e2-micro ~$8) + Spring(e2-small $17) + FastAPI(e2-small $17)
 
 ## 5. 서버별 추가 작업
 - **임베딩 VM (신규)**: e2-standard-2 / 디스크 30GB / 외부 IP 없음 / 태그 `embedding` / Docker 설치 후 TEI로 Qwen3 배포
-  - ⚠️ 데이터 임베딩과 동일하게 **mean pooling + `"Represent this passage for retrieval: "` 접두사 + L2 정규화** 일치 필수
+  - ⚠️ 데이터 임베딩과 질문 임베딩의 **pooling·정규화 방식 일치 필수**
+  - ~~mean pooling + 접두사 방식~~ → 이후 Qwen3 공식 가이드 준수로 변경됨 (last-token pooling, 문서 무접두사, 질문만 instruct — `retrospectives/search_embedding_qwen3.md` 참고)
 - **FastAPI VM**: `src/core/llm.py`의 embeddings를 Vertex AI → `http://[임베딩_내부IP]:8081` HTTP 호출로 교체 (httpx 사용). 인바운드 방화벽 추가 불필요(아웃바운드는 기본 허용).
 - **Nginx VM**: 변경 없음 (임베딩과 직접 통신하지 않음, 기존 Spring·FastAPI 프록시 그대로).
 - **방화벽**: 임베딩 VM에 `allow-embedding` 규칙 추가 (소스 태그 `fastapi`, 포트 8081, 대상 태그 `embedding`).
