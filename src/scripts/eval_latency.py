@@ -7,8 +7,7 @@ from typing import TypedDict
 
 import pandas as pd
 
-
-LATENCY_HISTORY_PATH = "data/eval_results/latency_history.csv"
+LATENCY_HISTORY_PATH = "data/eval_results/latency_history_30.csv"
 LATENCY_HISTORY_COLUMNS = [
     "실행일시",
     "실험명",
@@ -84,9 +83,10 @@ def append_latency_history(
     }
 
     os.makedirs(os.path.dirname(LATENCY_HISTORY_PATH), exist_ok=True)
-    needs_header = not os.path.exists(LATENCY_HISTORY_PATH) or os.path.getsize(
-        LATENCY_HISTORY_PATH
-    ) == 0
+    needs_header = (
+        not os.path.exists(LATENCY_HISTORY_PATH)
+        or os.path.getsize(LATENCY_HISTORY_PATH) == 0
+    )
     with open(LATENCY_HISTORY_PATH, "a", newline="", encoding="utf-8-sig") as history:
         writer = csv.DictWriter(history, fieldnames=LATENCY_HISTORY_COLUMNS)
         if needs_header:

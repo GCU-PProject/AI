@@ -2,7 +2,7 @@
 """
 [RAGAS 평가 스크립트]
 
-이 스크립트는 생성된 골든 데이터셋(ragas_testset.csv)의 질문들을
+이 스크립트는 검수된 골든 데이터셋(ragas_testset_2.csv)의 질문들을
 실제 RAG 파이프라인(번역 → 검색 → 답변 생성)에 통과시킨 뒤,
 Ragas 0.4.x 프레임워크로 자동 채점하여 시스템 성능을 측정합니다.
 
@@ -66,24 +66,11 @@ from ragas.run_config import RunConfig
 # =========================================================
 # 1. 설정값
 # =========================================================
-# 평가셋 경로. _manual/_small 평가셋을 쓰면 결과 파일/이력 실험명에도 자동으로 접미사가 붙는다.
-# 전체 평가 시: "data/ragas_testset.csv"
-# 발표용 수동 평가셋: "data/ragas_testset_manual.csv"
-# 축소 평가 시: "data/ragas_testset_small.csv"
-TESTSET_CSV_PATH = "data/ragas_testset.csv"
-
-# 평가셋 종류 → 결과 파일명/이력 실험명에 붙일 접미사
-_TESTSET_BASENAME = os.path.basename(TESTSET_CSV_PATH)
-if "manual" in _TESTSET_BASENAME:
-    NAME_SUFFIX = "_manual"
-elif "small" in _TESTSET_BASENAME:
-    NAME_SUFFIX = "_small"
-else:
-    NAME_SUFFIX = ""
+# 평가에 사용할 검수 완료 데이터셋
+TESTSET_CSV_PATH = "data/ragas_testset_2.csv"
 
 EVAL_RESULTS_DIR = "data/eval_results"
-# 이력 로그도 small/full을 분리해 섞이지 않게 한다.
-EVAL_HISTORY_PATH = os.path.join(EVAL_RESULTS_DIR, f"eval_history{NAME_SUFFIX}.csv")
+EVAL_HISTORY_PATH = os.path.join(EVAL_RESULTS_DIR, "eval_history_30.csv")
 
 # [채점 모델] 모든 실험에서 항상 gemini-3-flash-preview로 고정한다.
 #   (리걸벤치 기준 법률 분야 정확도가 더 높다고 판단해 채점 기준으로 채택)
@@ -273,7 +260,7 @@ async def run_evaluation(experiment_name: str, limit: int | None = None):
 
     print("\n⏱️ 실제 사용자 응답시간을 저장합니다...")
     append_latency_history(
-        experiment_name=f"{experiment_name}{NAME_SUFFIX}",
+        experiment_name=experiment_name,
         evaluation_type="RAG",
         records=latency_records,
     )
@@ -346,7 +333,7 @@ async def run_evaluation(experiment_name: str, limit: int | None = None):
 
     avg_scores = {
         "실행일시": datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "실험명": f"{experiment_name}{NAME_SUFFIX}",
+        "실험명": experiment_name,
         "검색재현율(ContextRecall)": round(means[metric_cols["context_recall"]], 4),
         "검색정밀도(ContextPrecision)": round(
             means[metric_cols["context_precision"]], 4

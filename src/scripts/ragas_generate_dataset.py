@@ -32,9 +32,9 @@ import pandas as pd
 # 프로젝트 루트를 sys.path에 추가
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
+from langchain_core.documents import Document
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.documents import Document
 from langchain_google_genai import ChatGoogleGenerativeAI
 from sqlalchemy import select
 
@@ -68,7 +68,7 @@ SEED_POOL_TARGET_BY_STATE = {
 }
 
 MAX_GENERATION_RETRIES = 2
-OUTPUT_CSV_PATH = "data/ragas_testset_2.csv"
+OUTPUT_CSV_PATH = "data/ragas_testset_3.csv"
 RAGAS_LLM_MODEL = "gemini-3.5-flash"
 
 # 평가 대상은 '주(state)' 단위로 고정한다. → 고정 벤치마크 + 실제 서비스 정합
@@ -94,62 +94,62 @@ STATE_TO_FEDERAL = {
 # - 앞쪽에는 우선 사용할 조항, 뒤쪽에는 생성 실패 시 사용할 예비 조항을 둔다.
 SEED_LAW_IDS_BY_STATE = {
     2: [
-        806516,  # CA: 21세 미만 BAC 0.01% 이상 운전 금지
-        798031,  # CA: 세금 주간 신고/납부 불이행 시 즉시 납부·징수
-        695385,  # CA: 급여 공제액을 직원 단체에 송금해야 하는 기한
-        821691,  # CA: 공공계약 일자리 공고와 지원자 우선 추천
-        821788,  # CA: 보조금 산정 시 아동부양비 처리
-        757191,  # CA: 신용 생명·장애 보험 해지와 환급
-        795219,  # CA: 잘못 납부한 세금 환급
-        1052014,  # US FED: 비이민 비자 신청서 7년 보관
         806012,  # CA: 사고 보고서는 원칙적으로 재판 증거로 사용할 수 없음
         806014,  # CA: 단순 재산 피해 사고의 경찰 보고서와 과실 판단 제한
         1006354,  # US FED: 소비자 서비스 계약 조건의 명확한 공개 의무
         675725,  # CA: RV 공원 임차 종료 시 최소 30일 전 통지
         1048484,  # US FED: 여권의 기본 유효기간은 발급일부터 10년
+        795235,  # CA: 세금 환급 청구 거절 시 납세자 통지·설명 의무
+        676915,  # CA: 신축 주택 지붕 보증의 사전 고지 의무
+        693836,  # CA: 자립 학생의 거주자 학비 분류 요건
+        794357,  # CA: 법원 판단 후 초과 납부 세금 환급
+        792947,  # CA: 세금 초과 납부액과 미납액의 상계
+        771410,  # CA: 후견 종료 후 유권자 등록 권리 회복
+        699541,  # CA: 다른 관할에서 형성된 법적 결합의 동거관계 인정
+        791712,  # CA: 심리 녹음·기록 요청 가능 기간
     ],
     3: [
-        946257,  # NY: BAC 0.08% / 0.18% 음주운전 기준
-        993506,  # NY: 인디언 보호구역 담배세 면제/과세 기준
-        924183,  # NY: 고용주의 임금·근로시간 기록 보존 의무
-        979990,  # NY: 근무일 spread of hours 정의
-        907120,  # NY: 업무상 부상·질병 후 복직/휴직 보호
-        927618,  # NY: 전자 접근 장치 위조 범죄
-        936475,  # NY: 임대계약에서 출산·자녀 차별 금지
-        1015175,  # US FED: 미국 정부 상대 허위 서류 사기
         922645,  # NY: 신원 미상 뺑소니 사고 보호에 필요한 신체 접촉 요건
         935240,  # NY: 이해관계인의 경찰 사고 보고서 열람 권리
         1051670,  # US FED: 분할 납부 세금의 초과 납부액 처리
         936472,  # NY: 임대주택 열쇠 복제 비용의 상한
         944304,  # NY: 특정 목적에 적합한 상품에 대한 묵시적 보증
+        927644,  # NY: 보험 사기를 위한 고의 교통사고와 2급 중죄
+        906952,  # NY: 긴급 지원을 요청한 거주자 때문에 집주인을 처벌할 수 없음
+        936410,  # NY: 정당한 사유 없는 임차인 퇴거 제한
+        944307,  # NY: 상품 보증의 보호를 받을 수 있는 제3자
+        918658,  # NY: 소비자 보증 권리의 포기 금지
+        926693,  # NY: 건물 규칙 변경 시 임차인 통지
+        927645,  # NY: 중상해·사망을 초래한 고의 교통사고와 1급 중죄
+        936424,  # NY: 새 임대계약 체결 후 시설물 제거 권리
     ],
     5: [
-        1503278,  # Ontario: 초보 운전자 BAC 0 조건
-        1361100,  # Canada FED: 세금 체납/출국 우려 시 납부 요구와 압류
-        1378631,  # Canada FED: 휴가 중 휴직·질병 사유 발생 시 휴가 중단
-        1542494,  # Ontario: 소송 지연 시 사건 기각 기준
-        1388237,  # Canada FED: 공공부문 노동 조건 판단 요소
-        1439764,  # Canada FED: 주택담보대출 보험 정보 공개
-        1428748,  # Canada FED: 외국인의 공중보건 위험 판단 기준
         1487400,  # Ontario: 임대인이 후일자 수표나 자동이체를 강제할 수 없음
         1487401,  # Ontario: 임차인의 요청 시 임대료 영수증 무료 제공
         1482634,  # Ontario: 채용 공고에서 AI 사용 여부 공개
         1482734,  # Ontario: 휴직 기간의 고용기간 포함 기준
         1456793,  # Canada FED: 개인 계좌 잔액 부족 수수료 상한과 예외
+        1504224,  # Ontario: 자동차 보험에서 제외 운전자 사고의 보상 제한
+        1487309,  # Ontario: 임차인의 정기·고정 임대 종료 통지
+        1487357,  # Ontario: 불법행위 등이 관련된 신속 퇴거 명령
+        1502087,  # Ontario: 신형 농기계의 품질 묵시적 보증
+        1529833,  # Ontario: 야영장의 의료 지원 인력 의무
+        1487326,  # Ontario: 토지 분할 시 기존 임차인의 점유 보호
+        1518248,  # Ontario: 주거 돌봄 근로자의 비근무 시간 판단
     ],
     6: [
-        1574088,  # BC: 운전금지 통지 요건
-        1574089,  # BC: 운전금지 통지 후 90일 운전금지
-        1423156,  # Canada FED: 일부 외국인의 체류·취업 허가 처리 수수료 면제
-        1560922,  # BC: 법정공휴일 근무 시 임금 지급 기준
-        1378250,  # Canada FED: 해고된 근로자의 노동 조정 급여 신청
-        1580641,  # BC: 임대료 압류 과정의 위법행위와 손해배상
-        1429183,  # Canada FED: 이민 심사 과정의 문서 제출 방법
         1596282,  # BC: 사고 피해자의 숙박비 지급·환급 요건
         1596311,  # BC: 사고 보험금 청구 시 의료 증명서·보고서 제출
         1596308,  # BC: 사고 후 2년이 지난 보험금 청구의 거절 기준
         1465902,  # Canada FED: 동일임금 평가 시 근무환경·초과근무 처리
         1476287,  # Canada FED: 고용보험에서 초과근무 시간 산정 방식
+        1554985,  # BC: 선불 구매 카드의 만료일 금지
+        1554954,  # BC: 소비자 계약 취소 시 15일 이내 환불
+        1580783,  # BC: 임대 종료 후 주소 미제공 시 보증금 반환 권리 소멸
+        1601311,  # BC: 임대주택 상태 점검 보고서의 증거 효력
+        1598219,  # BC: 이동식 주택 임대 종료 시 임차인 보상액
+        1561867,  # BC: 보호자의 양육 시간과 일상적 의사결정 권한
+        1587201,  # BC: 작업 중지 명령의 서면 발급과 유효기간
     ],
 }
 
@@ -353,7 +353,11 @@ async def generate_dataset():
         seed_count = len(SEED_LAW_IDS_BY_STATE.get(state_id, []))
         seed_target = SEED_POOL_TARGET_BY_STATE[state_id]
         question_target = TARGET_QUESTIONS_BY_STATE[state_id]
-        status = "완료" if seed_count >= seed_target else f"{seed_target - seed_count}개 추가 필요"
+        status = (
+            "완료"
+            if seed_count >= seed_target
+            else f"{seed_target - seed_count}개 추가 필요"
+        )
         print(
             f"      - country_id={state_id}: seed {seed_count}/{seed_target}, "
             f"목표 문항 {question_target}개 ({status})"

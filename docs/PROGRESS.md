@@ -256,6 +256,11 @@ v2: 한국어 질문 → [영어 번역] → 임베딩 → 검색 → 답변 (�
 
 번역에는 별도 API가 아닌 기존 LLM(Gemini)을 활용하며, 추가 비용 없이 기존 인프라를 재사용한다.
 
+> **2026-06-10 변경 결정:** 번역 품질을 우선하기 위해 검색용 질문 번역을
+> Google Cloud Translation LLM(`general/translation-llm`)으로 분리할 예정이다.
+> 외부 평가, Google 공식 가이드, 선택 한계 및 자체 검증 계획은
+> [`TRANSLATION_MODEL_DECISION.md`](TRANSLATION_MODEL_DECISION.md)에 정리하였다.
+
 ```python
 translation_prompt = ChatPromptTemplate.from_messages([
     ("system", "You are a translator. Translate the user's message to English. "

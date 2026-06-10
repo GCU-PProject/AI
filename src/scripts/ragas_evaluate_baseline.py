@@ -56,24 +56,11 @@ from ragas.run_config import RunConfig
 # =========================================================
 # 1. 설정값 (RAG 버전과 동일하게 맞춤)
 # =========================================================
-# 평가셋 경로. _manual/_small 평가셋을 쓰면 결과 파일/이력 실험명에도 자동으로 접미사가 붙는다.
-# 전체 평가 시: "data/ragas_testset.csv"
-# 발표용 수동 평가셋: "data/ragas_testset_manual.csv"
-# 축소 평가 시: "data/ragas_testset_small.csv"
-TESTSET_CSV_PATH = "data/ragas_testset.csv"
-
-# 평가셋 종류 → 결과 파일명/이력 실험명에 붙일 접미사
-_TESTSET_BASENAME = os.path.basename(TESTSET_CSV_PATH)
-if "manual" in _TESTSET_BASENAME:
-    NAME_SUFFIX = "_manual"
-elif "small" in _TESTSET_BASENAME:
-    NAME_SUFFIX = "_small"
-else:
-    NAME_SUFFIX = ""
+# 평가에 사용할 검수 완료 데이터셋
+TESTSET_CSV_PATH = "data/ragas_testset_2.csv"
 
 EVAL_RESULTS_DIR = "data/eval_results"
-# 이력 로그도 small/full을 분리해 섞이지 않게 한다.
-EVAL_HISTORY_PATH = os.path.join(EVAL_RESULTS_DIR, f"eval_history{NAME_SUFFIX}.csv")
+EVAL_HISTORY_PATH = os.path.join(EVAL_RESULTS_DIR, "eval_history_30.csv")
 
 
 def find_metric_column(df: pd.DataFrame, metric_name: str) -> str:
@@ -214,7 +201,7 @@ async def run_baseline_evaluation(experiment_name: str, limit: int | None = None
 
     print("\n⏱️ 실제 사용자 응답시간을 저장합니다...")
     append_latency_history(
-        experiment_name=f"{experiment_name}{NAME_SUFFIX}",
+        experiment_name=experiment_name,
         evaluation_type="Baseline",
         records=latency_records,
     )
@@ -257,7 +244,7 @@ async def run_baseline_evaluation(experiment_name: str, limit: int | None = None
     means = result_df[[factual_col]].mean()
     avg_scores = {
         "실행일시": datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "실험명": f"{experiment_name}{NAME_SUFFIX}",
+        "실험명": experiment_name,
         "검색재현율(ContextRecall)": "-",  # RAG 미적용
         "검색정밀도(ContextPrecision)": "-",  # RAG 미적용
         "근거충실도(Faithfulness)": "-",  # RAG 미적용
