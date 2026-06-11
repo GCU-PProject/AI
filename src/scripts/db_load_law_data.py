@@ -21,7 +21,7 @@ from src.models import Law
 DATABASE_URL = settings.ASYNC_DATABASE_URL
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# 적재할 파일을 여기에 직접 명시한다. (data/ 폴더 기준 파일명)ß
+# 적재할 파일을 여기에 직접 명시한다. (data/ 폴더 기준 파일명)
 # 실수로 전체가 적재되는 것을 막기 위해, 비어 있으면 실행되지 않고 에러로 중단된다.
 TARGET_FILES = [
     "Canada_Law_Data_Embedded.jsonl",
@@ -84,9 +84,6 @@ def build_law(row: dict) -> Law | None:
 async def load_law_data(
     limit: int | None = None,
 ) -> None:
-    # --------------------------------------------------
-    # 3. 초기화 (DB Only) - Vertex AI 제거됨
-    # --------------------------------------------------
     print(f"🔧 설정 로드 완료: DB={settings.DB_NAME}")
     print("🔌 DB 연결 중...")
     engine = create_async_engine(DATABASE_URL, echo=False)

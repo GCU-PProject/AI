@@ -19,9 +19,14 @@ class Country(Base):
     [데이터 예시]
     | country_id | country_code | country_name  | state_code | state_name |
     |------------|-------------|---------------|------------|------------|
-    | 1          | US          | United States | CA         | California |
-    | 2          | US          | United States | NY         | New York   |
-    | 3          | GB          | United Kingdom| NULL       | NULL       |
+    | 1          | US          | United States | NULL       | NULL       |
+    | 2          | US          | United States | CA         | California |
+    | 3          | US          | United States | NY         | New York   |
+    | 4          | CA          | Canada        | NULL       | NULL       |
+    | 5          | CA          | Canada        | ON         | Ontario    |
+    | 6          | CA          | Canada        | BC         | British Columbia |
+
+    state_code가 NULL인 행은 연방(국가 단위) 법률을 의미합니다.
     """
 
     __tablename__ = "countries"
@@ -32,7 +37,7 @@ class Country(Base):
     country_code = Column(String(10), nullable=False)
     # 국가명
     country_name = Column(String(100), nullable=False)
-    # 주/지역 코드 (
+    # 주/지역 코드 (NULL이면 연방/국가 단위)
     state_code = Column(String(10), nullable=True)
     # 주/지역명
     state_name = Column(String(100), nullable=True)

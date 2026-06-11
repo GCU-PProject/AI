@@ -2,34 +2,11 @@
 """
 대화 기록 관리 모듈 (Conversation Memory)
 
-이 파일은 사용자의 대화 이력을 관리하여,
-후속 질문에서 이전 맥락을 참고할 수 있게 합니다.
+후속 질문("그러면 벌금은?")을 대화 기록 기반으로 독립 질문
+("캘리포니아 음주운전 벌금은?")으로 재구성해 검색이 성립하게 한다.
 
-[왜 필요한가?]
-RAG 시스템은 기본적으로 각 질문을 독립적으로 처리합니다.
-그래서 사용자가 "그러면 벌금은?" 같은 후속 질문을 하면,
-"그러면"이 무엇을 가리키는지 알 수 없어 검색이 실패합니다.
-
-이 모듈은 대화 기록을 보고 후속 질문을 독립적인 질문으로 재구성합니다.
-예: "그러면 벌금은?" → "캘리포니아 음주운전의 벌금은 얼마인가?"
-
-[핵심 구성 요소]
-1. chat_histories (딕셔너리): session_id별 대화 기록 저장소
-2. contextualize_question(): 대화 맥락을 반영하여 질문 재구성
-3. save_to_history(): 질문/답변을 대화 기록에 저장
-
-[전체 흐름]
-사용자 질문 + session_id
-    → get_chat_history()로 이전 대화 기록 조회
-    → contextualize_question()으로 질문 재구성 (대화 기록이 있을 때만)
-    → chat_service.py에서 재구성된 질문으로 RAG 파이프라인 실행
-    → save_to_history()로 이번 질문/답변을 기록에 저장
-
-[메모리 저장 방식]
-현재는 Python 딕셔너리(인메모리) 방식입니다.
-- 장점: 추가 인프라 없이 바로 사용 가능
-- 단점: 서버를 재시작하면 모든 대화 기록이 초기화됨
-- 향후: DB(PostgreSQL)에 저장하도록 이 파일만 수정하면 됨
+저장 방식: 인메모리 딕셔너리 (서버 재시작 시 초기화됨,
+DB 저장이 필요해지면 이 파일만 수정하면 됨)
 """
 
 import logging
@@ -42,19 +19,8 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder, load
 logger = logging.getLogger(__name__)
 
 # =========================================================
-# 1. 대화 기록 저장소
+# 1. 대화 기록 저장소 — {session_id: ChatMessageHistory}
 # =========================================================
-# session_id를 키(key)로, 대화 기록 객체를 값(value)으로 저장하는 딕셔너리입니다.
-#
-# [구조 예시]
-# {
-#     "abc-123": ChatMessageHistory([Human("음주운전 처벌?"), AI("VEH 23152에 따르면...")]),
-#     "def-456": ChatMessageHistory([Human("교통사고 보상?"), AI("CIV 3333에 따르면...")]),
-# }
-#
-# ChatMessageHistory: LangChain에서 제공하는 대화 기록 관리 클래스
-# - 내부에 messages 리스트를 가지고 있음
-# - add_user_message(), add_ai_message()로 메시지 추가
 chat_histories: Dict[str, ChatMessageHistory] = {}
 
 # 슬라이딩 윈도우 크기: 질문 재구성 시 참고할 최근 대화 쌍 수
@@ -86,25 +52,9 @@ def get_chat_history(session_id: Optional[str]) -> ChatMessageHistory:
 # =========================================================
 # 2. 질문 재구성 (Contextualize Question)
 # =========================================================
-# [핵심 아이디어]
-# 후속 질문을 대화 기록을 참고하여 독립적인 질문으로 재구성합니다.
-# 재구성된 질문은 벡터 검색에만 사용되고,
-# 최종 LLM 답변 생성에는 원본 질문이 사용됩니다.
-#
-# [예시]
-# 대화 기록: [("음주운전 처벌이 뭐야?", "VEH 23152에 따르면...")]
-# 후속 질문: "그러면 벌금은?"
-# 재구성 결과: "캘리포니아 음주운전(DUI)의 벌금은 얼마인가?"
-#
-# [왜 별도 프롬프트가 필요한가?]
-# 대화 기록을 그대로 검색 쿼리에 넣으면 너무 길어지고,
-# 벡터 검색 정확도가 떨어집니다.
-# 대신 LLM에게 "핵심만 뽑아서 검색용 질문으로 바꿔줘"라고 요청합니다.
-
-# 질문 재구성용 프롬프트
-# - few-shot 예시를 포함하여 LLM이 답변 대신 짧은 질문만 출력하도록 유도
-# - MessagesPlaceholder("chat_history"): 대화 기록이 이 자리에 삽입됨
-# - {input}: 사용자의 최신 질문이 삽입됨
+# 재구성된 질문은 벡터 검색에만 사용되고, 답변 생성에는 원본 질문이 사용된다.
+# 대화 기록을 검색 쿼리에 그대로 넣으면 길어져 검색 정확도가 떨어지므로,
+# LLM이 핵심만 뽑은 짧은 독립 질문으로 바꾼다. (few-shot 예시로 형식 유도)
 
 contextualize_yaml = load_prompt("src/prompts/contextualize.yaml", encoding="utf-8")
 
@@ -120,20 +70,12 @@ CONTEXTUALIZE_PROMPT = ChatPromptTemplate.from_messages(
 async def contextualize_question(query: str, session_id: Optional[str], llm) -> str:
     """
     대화 기록을 참고하여 후속 질문을 독립적인 질문으로 재구성합니다.
-
-    대화 기록이 비어있으면 (첫 질문이면) 원본 질문을 그대로 반환합니다.
+    대화 기록이 비어있으면(첫 질문) 원본 질문을 그대로 반환합니다.
 
     Args:
         query: 사용자의 원본 질문
         session_id: 대화 세션 ID
         llm: LLM 객체 (chat_service.py의 llm을 전달받음)
-
-    Returns:
-        재구성된 질문 문자열 (또는 첫 질문이면 원본 그대로)
-
-    [동작 예시]
-    첫 질문: "음주운전 처벌?" → 대화 기록 없음 → "음주운전 처벌?" (그대로)
-    후속:    "벌금은?"       → 대화 기록 참고 → "캘리포니아 음주운전 벌금?" (재구성)
     """
     if session_id is None:
         return query

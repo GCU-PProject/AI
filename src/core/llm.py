@@ -31,22 +31,9 @@ class RemoteEmbeddings(Embeddings):
 embeddings = RemoteEmbeddings()
 
 
-# (2) LLM (Large Language Model): 답변을 생성하는 AI 모델
-# - 사용 모델: Google Gemini (settings.GCP_MODEL_NAME, 예: gemini-3.5-flash)
-# - 용도: 검색된 법률 조항을 근거로 사용자에게 자연어 답변을 생성
-#
-# [파라미터 설명]
-# - temperature (0~1): LLM 응답의 무작위성(창의성) 조절
-#     0 = 가장 확률 높은 단어만 선택 → 일관되고 정확한 답변 (법률 서비스에 적합)
-#     1 = 다양한 단어를 선택 → 창의적이지만 예측 불가능한 답변
-# - max_output_tokens: 생성할 답변의 최대 길이
-# - top_k: 다음 단어 생성 시 확률 상위 K개의 후보만 고려
-#     20 = 상위 20개 단어 중에서만 선택 → 이상한 단어가 선택될 가능성 차단
-# - top_p (nucleus sampling): 누적 확률이 P에 도달할 때까지의 단어만 후보로 사용
-#     0.7 = 확률 합이 70%가 될 때까지의 단어만 고려 → 신뢰도 높은 단어 위주 선택
-#
-# ※ temperature=0이면 항상 최고 확률 단어를 선택하므로 top_k, top_p의 실질적 영향은
-#   미미하지만, 안전장치로 설정
+# (2) 답변 생성 LLM (Google Gemini, 모델명은 .env의 GCP_MODEL_NAME)
+# - temperature=0: 법률 서비스 특성상 일관되고 결정적인 답변 우선
+# - top_k=20 / top_p=0.7: temperature=0에서는 영향이 미미하지만 안전장치로 설정
 def get_llm(max_output_tokens: int = 4096) -> ChatGoogleGenerativeAI:
     return ChatGoogleGenerativeAI(
         model=settings.GCP_MODEL_NAME,
@@ -57,6 +44,10 @@ def get_llm(max_output_tokens: int = 4096) -> ChatGoogleGenerativeAI:
         max_tokens=max_output_tokens,
         top_k=20,
         top_p=0.7,
-        # thinking_budget=0, # 추론 x
+        # [추론(thinking) 설정 — 모델 비교 실험 시 둘 중 하나만 활성화]
+        # - thinking_budget=0   : 추론 완전 비활성화 (lite 계열 모델은 이 파라미터도 불필요)
+        # - thinking_level="low": 추론 약하게 유지 (3-flash/3.1-pro/3.5-flash만 지원)
+        # ※ 두 파라미터를 동시에 주면 안 됨. 미설정 시 기본값은 high.
+        # thinking_budget=0,
         thinking_level="low",
     )

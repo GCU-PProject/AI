@@ -3,7 +3,7 @@
 ─────────────────────────────────────────────────────────────
 [역할]
   Hugging Face의 'othertales/uklegislation' 데이터셋에서 실제 영국 법률 데이터를 가져와
-  조항 단위로 청킹(Chunking) 및 정제하고, 새로운 DB의 country_id (10)
+  조항 단위로 청킹(Chunking) 및 정제하고, 새로운 DB의 country_id (14)
   및 실제 컬럼명과 100% 완벽하게 일치하는 필드명을 가진
   'data/UK_Law_Data_Raw.jsonl' 파일로 안전하게 저장합니다.
 """

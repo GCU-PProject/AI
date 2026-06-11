@@ -18,8 +18,8 @@ RAGAS로 채점한다. RAG 적용 버전(ragas_evaluate_rag.py)과 비교하여
 
 [결과 저장]
     data/eval_results/
-    ├── eval_history.csv          ← 실행 이력 (RAG 버전과 공유, 한 줄 추가)
-    └── latency_history.csv       ← 실제 응답시간 이력 (RAG 버전과 공유)
+    ├── eval_history_30.csv       ← 실행 이력 (RAG 버전과 공유, 한 줄 추가)
+    └── latency_history_30.csv    ← 실제 응답시간 이력 (RAG 버전과 공유)
 """
 
 import argparse
@@ -38,6 +38,7 @@ from src.core.observability import setup_langsmith
 setup_langsmith()
 
 from src.core.config import settings
+from src.scripts.eval_common import find_metric_column
 from src.scripts.eval_latency import LatencyRecord, append_latency_history
 
 # GCP 인증 환경변수 주입
@@ -61,21 +62,6 @@ TESTSET_CSV_PATH = "data/ragas_testset_2.csv"
 
 EVAL_RESULTS_DIR = "data/eval_results"
 EVAL_HISTORY_PATH = os.path.join(EVAL_RESULTS_DIR, "eval_history_30.csv")
-
-
-def find_metric_column(df: pd.DataFrame, metric_name: str) -> str:
-    """RAGAS 버전에 따라 metric_name 또는 metric_name(...) 형태로 저장된 컬럼을 찾는다."""
-    candidates = [
-        col
-        for col in df.columns
-        if col == metric_name or col.startswith(f"{metric_name}(")
-    ]
-    if not candidates:
-        raise KeyError(
-            f"RAGAS 결과에서 '{metric_name}' 컬럼을 찾지 못했습니다. "
-            f"실제 컬럼: {list(df.columns)}"
-        )
-    return candidates[0]
 
 
 # =========================================================

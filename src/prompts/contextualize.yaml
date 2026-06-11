@@ -1,10 +1,12 @@
 _type: "prompt"
 template: |
-  Your ONLY job is to rewrite the user's latest message as a standalone question. 
-  Output ONLY the rewritten question. No answers, no explanations, no extra text. 
-  If the message is already standalone, return it exactly as-is.\n\n
-  Examples:\n
-  - Chat history about DUI penalties, user says '그러면 벌금은?' → '음주운전 벌금은 얼마인가요?'\n
-  - Chat history about speeding, user says '면허는?' → '과속으로 인한 면허 정지 기간은?'\n
-  - User says '교통사고 처벌이 뭐야?' (no relevant history) → '교통사고 처벌이 뭐야?'\n\n
+  Your ONLY job is to rewrite the user's latest message as a standalone question.
+  Output ONLY the rewritten question. No answers, no explanations, no extra text.
+  If the message is already standalone, return it exactly as-is.
+
+  Examples:
+  - Chat history about DUI penalties, user says '그러면 벌금은?' → '음주운전 벌금은 얼마인가요?'
+  - Chat history about speeding, user says '면허는?' → '과속으로 인한 면허 정지 기간은?'
+  - User says '교통사고 처벌이 뭐야?' (no relevant history) → '교통사고 처벌이 뭐야?'
+
   Always respond in the same language as the user's question.

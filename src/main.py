@@ -1,31 +1,20 @@
 # src/main.py
 """
-FastAPI 앱의 진입점 (Entry Point)
+FastAPI 앱의 진입점
 
-이 파일은 FastAPI 애플리케이션을 생성하고,
-API 라우터를 등록합니다.
-
-[서버 실행 방법]
-uvicorn src.main:app --reload
-→ 이 명령어에서 'src.main:app'은 "src/main.py 파일의 app 변수"를 의미합니다.
-→ --reload: 코드 변경 시 서버가 자동으로 재시작됩니다.
+실행: uvicorn src.main:app --reload
 
 [API 구조]
-/                  → 헬스 체크 (서버 상태 확인)
-/api/qna           → 법률 Q&A (LangChain 기반)
+/                  → 헬스 체크
+/api/qna           → 법률 Q&A
 /api/compare       → 법률 비교
 /api/risk          → 리스크 카드 조회
-
-[load_dotenv()가 import보다 먼저 오는 이유]
-.env 파일의 환경변수(GCP 인증 정보 등)를 OS에 먼저 등록해야
-이후 import되는 모듈들(config.py, chat_service.py 등)이
-환경변수를 정상적으로 읽을 수 있습니다.
 """
 
 from src.core.observability import setup_langsmith
 
-# .env 파일의 환경변수를 OS에 등록 (GCP_PROJECT_ID, DB 접속 정보, 인증키 경로 등)
-# ※ 반드시 다른 모듈을 import하기 전에 호출해야 합니다!
+# .env의 LangSmith 추적 설정을 OS 환경변수에 등록.
+# 이후 import되는 모듈들이 참조하므로 반드시 다른 import보다 먼저 호출.
 setup_langsmith()
 
 import logging

@@ -1,21 +1,9 @@
 # src/services/chat_service.py
 """
-LangChain 기반 법률 Q&A 서비스 (RAG - Retrieval-Augmented Generation)
+LangChain 기반 법률 Q&A 서비스 (RAG 파이프라인)
 
-이 파일은 사용자의 법률 질문에 대해 관련 법률 조항을 검색(Retrieval)하고,
-검색된 조항을 근거로 AI가 답변을 생성(Generation)하는 RAG 파이프라인을 구현합니다.
-
-LangChain 프레임워크를 사용하여 각 단계를 독립적인 컴포넌트로 분리하고,
-LCEL(LangChain Expression Language) 파이프라인으로 연결합니다.
-
-[전체 처리 흐름]
-사용자 질문 (한국어)
-    → 1단계: 질문을 영어로 번역 (검색 정확도 향상)
-    → 2단계: 번역된 질문을 벡터(숫자 배열)로 변환 (임베딩)
-    → 3단계: DB에서 벡터 유사도 기반으로 관련 법률 조항 검색
-    → 4단계: 검색 결과를 프롬프트에 삽입
-    → 5단계: LLM(Gemini)이 근거 자료 기반으로 답변 생성
-    → 6단계: API 응답 반환
+[처리 흐름]
+한국어 질문 → 영어 번역 → 임베딩 → 벡터 검색 → 검색 결과 + 원본 질문으로 답변 생성
 """
 import asyncio
 import html
@@ -38,53 +26,27 @@ from src.services.memory import contextualize_question, save_to_history
 logger = logging.getLogger(__name__)
 
 # =========================================================
-# 1. 설정값 (하이퍼파라미터)
+# 1. 설정값 (.env로 관리, 평가 실험으로 튜닝)
 # =========================================================
-# 이 값들은 RAG 검색 품질에 직접 영향을 미치며,
-# 데이터 특성이나 사용 환경에 따라 조정이 필요할 수 있습니다.
-
-# TOP_K: 벡터 검색에서 가져올 최대 문서 수
-# - 사용자의 질문과 가장 유사한 법률 조항을 상위 몇 개까지 가져올지 결정합니다.
-# - 너무 작으면(예: 2~3) 관련 법률을 놓칠 수 있고,
-#   너무 크면(예: 20) 관련 없는 문서가 섞여 답변 품질이 저하됩니다.
-# - 검색 정확도(Recall)를 극대화하고 누락을 방지하기 위해 7로 설정했습니다.
+# TOP_K: 벡터 검색에서 가져올 최대 문서 수 (기본값 5)
 TOP_K = settings.RAG_TOP_K
 
-# MAX_DISTANCE_THRESHOLD: L2 거리(유클리드 거리) 기반 유사도 임계값
-# - 벡터 간 거리가 이 값 이하인 문서만 "관련 있음"으로 판단합니다.
-# - 거리가 0에 가까울수록 질문과 문서가 의미적으로 유사합니다.
-# - 이 값보다 거리가 큰 문서는 관련성이 낮다고 판단하여 제외합니다.
-# - 예: 질문 "음주운전 처벌"과 문서 "주차 위반"의 거리가 0.92라면,
-#        0.92 > 0.85 이므로 이 문서는 검색 결과에서 제외됩니다.
+# MAX_DISTANCE_THRESHOLD: L2 거리 임계값 (기본값 0.90)
+# 이 거리보다 먼 문서는 관련성이 낮다고 판단해 제외합니다.
 MAX_DISTANCE_THRESHOLD = settings.RAG_MAX_DISTANCE_THRESHOLD
 
 # =========================================================
-# 2. AI 모델 초기화
+# 2. AI 모델 초기화 (모듈 로드 시 1회 생성, 전 요청 재사용)
 # =========================================================
-# 이 모듈이 import될 때 한 번만 실행됩니다.
-# LangChain에서는 객체를 모듈 로드 시 한 번만 생성하면
-# 이후 모든 요청에서 재사용됩니다.
-
 llm = get_llm()
 
 # =========================================================
-# 3. 질문 번역 기능 (검색 정확도 향상을 위한 전처리)
+# 3. 질문 번역 (검색 정확도 향상을 위한 전처리)
 # =========================================================
-# [문제] DB에 저장된 법률 데이터는 영어인데, 사용자가 한국어로 질문하면
-#        한국어 벡터와 영어 벡터 간의 거리가 커져서 검색 정확도가 떨어집니다.
-#        예: "음주운전 처벌" (한국어 벡터) ↔ "DUI penalties" (영어 벡터) → 거리가 큼
-#
-# [해결] 검색 전에 질문을 영어로 번역하여 임베딩합니다.
-#        번역된 질문은 검색에만 사용하고, 최종 답변 생성 시에는
-#        원본 질문(한국어)을 그대로 사용하여 한국어로 답변합니다.
-#
-# [흐름]
-# 한국어 질문 → [영어 번역] → 임베딩 → 벡터 검색 (여기까지 번역본 사용)
-#                                                  ↓
-#               원본 한국어 질문 + 검색 결과 → LLM → 한국어 답변 생성
-#
-# [모델] Google Cloud Translation LLM(general/translation-llm)을 사용합니다.
-# 번역 모델을 답변 생성 모델과 분리하여, 생성 모델 비교 실험에서도 검색 조건을 고정합니다.
+# 법률 데이터가 영어이므로 한국어 질문 그대로 임베딩하면 검색 정확도가 떨어진다.
+# → 번역본은 검색에만 사용하고, 답변 생성에는 원본 한국어 질문을 사용한다.
+# 번역 모델(Cloud Translation LLM)을 생성 모델과 분리해,
+# 생성 모델 비교 실험에서도 검색 조건이 고정되도록 한다.
 
 translation_client = translate_v3.TranslationServiceClient()
 TRANSLATION_PARENT = (
@@ -138,23 +100,12 @@ async def translate_query(query: str) -> str:
 # =========================================================
 # 4. RAG 프롬프트 템플릿 (답변 생성용)
 # =========================================================
-# LLM에게 전달할 시스템 프롬프트입니다.
-# 이 프롬프트는 LLM의 행동 규칙, 답변 형식, 가드레일(안전장치)을 정의합니다.
-#
-# [프롬프트 설계 핵심]
-# 1. 가드레일 (할루시네이션 방지):
-#    - "반드시 근거 자료만 사용" → LLM이 학습 데이터에서 지어내는 것을 방지
-#    - "관련 없으면 답변 불가 처리" → 무관한 자료로 억지 답변 생성 방지
-# 2. 답변 형식 통일:
-#    - 결론 → 상세 내용 → 참고 법령 → 면책 조항 순서로 구조화
-# 3. 인용 방식:
-#    - 본문에 법률 코드가 섞이면 가독성이 떨어지므로, [참고 법령] 섹션으로 분리
+# 설계 핵심: ① 근거 자료만 사용 + 관련 없으면 답변 불가 (할루시네이션 가드레일)
+# ② 결론→상세→참고 법령→면책 순의 형식 통일 ③ 법률 코드는 [참고 법령] 섹션에만 표기
 
 chat_yaml = load_prompt("src/prompts/chat.yaml", encoding="utf-8")
 
-# ChatPromptTemplate: LangChain에서 LLM에 전달할 프롬프트를 구조화하는 클래스
-# - ("system", SYSTEM_PROMPT): AI의 역할과 규칙 정의. {context}는 검색된 법률 텍스트로 치환
-# - ("human", "{question}"): 사용자의 원본 질문. 한국어 그대로 전달하여 한국어 답변 유도
+# {context}: 검색된 법률 텍스트 / {question}: 원본 질문 (한국어 그대로 → 한국어 답변 유도)
 CHAT_PROMPT = ChatPromptTemplate.from_messages(
     [
         ("system", chat_yaml.template),
@@ -166,16 +117,9 @@ CHAT_PROMPT = ChatPromptTemplate.from_messages(
 # =========================================================
 # 5. 벡터 검색 함수 (커스텀 Retriever)
 # =========================================================
-# [왜 커스텀 검색 함수를 만들었는가?]
-# LangChain에는 PGVector라는 벡터 스토어가 내장되어 있지만,
-# 이것은 LangChain 자체 테이블 구조를 요구합니다.
-# 우리는 이미 laws 테이블에 법률 데이터와 임베딩을 저장해두었으므로,
-# 기존 테이블 구조를 변경하지 않기 위해 SQLAlchemy 쿼리를 직접 작성합니다.
-#
-# [검색 결과를 LangChain Document로 변환하는 이유]
-# LangChain의 다른 컴포넌트(프롬프트, 체인 등)와 호환되려면
-# 검색 결과를 LangChain의 표준 데이터 형식인 Document 객체로 변환해야 합니다.
-# Document는 page_content(본문)와 metadata(메타데이터)로 구성됩니다.
+# LangChain 내장 PGVector는 자체 테이블 구조를 요구하므로,
+# 기존 laws 테이블을 그대로 쓰기 위해 SQLAlchemy 쿼리를 직접 작성한다.
+# 검색 결과는 LangChain 표준 형식인 Document로 변환해 체인과 호환시킨다.
 
 
 @traceable
@@ -227,14 +171,14 @@ async def retrieve_laws(
     벡터 유사도 기반으로 관련 법률 조항을 검색합니다.
 
     [처리 과정]
-    1. 질문 텍스트를 768차원 벡터로 변환 (임베딩)
-    2. DB의 모든 법률 벡터와 L2 거리(유클리드 거리) 계산
+    1. 질문 텍스트를 1024차원 벡터로 변환 (임베딩)
+    2. 법률 벡터와 L2 거리(유클리드 거리) 계산 (HNSW 인덱스 사용)
     3. 지정된 국가(country_id)의 법률 중 거리가 가장 가까운 TOP_K개 조회
     4. 임계값(MAX_DISTANCE_THRESHOLD) 이하인 문서만 유효한 결과로 반환
 
     Args:
         query: 검색할 질문 (영어로 번역된 상태)
-        country_id: 검색 대상 국가 ID (예: 1=캘리포니아, 2=뉴욕)
+        country_id: 검색 대상 국가 ID (예: 2=캘리포니아, 3=뉴욕)
         db: 비동기 DB 세션 (SQLAlchemy AsyncSession)
 
     Returns:
@@ -252,21 +196,14 @@ async def retrieve_laws(
         logger.warning("⚠️ retrieve_laws에 공백만 있는 query가 전달되었습니다.")
         return [], []
 
-    # embed_query()는 텍스트를 1024차원 숫자 배열로 변환합니다. (Qwen3-Embedding-0.6B)
-    # 예: "DUI penalties" → [0.012, -0.034, 0.056, ..., 0.078] (1024개)
+    # 질문을 1024차원 벡터로 변환 (Qwen3-Embedding-0.6B)
     try:
         query_vector = embeddings.embed_query(query_str)
     except Exception as e:
         logger.error("❌ embed_query 중 오류 발생! 입력 쿼리: %r, 에러: %s", query_str, e)
         raise
 
-
-    # Step 2: DB에서 벡터 유사도 검색 (SQLAlchemy + pgvector)
-    # - Law.embedding.l2_distance(query_vector): 질문 벡터와 각 법률 벡터 간의 L2 거리 계산
-    #   L2 거리 = 두 벡터 간의 유클리드 거리. 값이 작을수록 의미적으로 유사
-    # - .where(country_id == ...): 특정 국가의 법률만 필터링
-    # - .order_by(distance): 거리가 가까운(유사한) 순서로 정렬
-    # - .limit(TOP_K): 상위 5개만 가져옴
+    # Step 2: 벡터 유사도 검색 — L2 거리가 가까운 순으로 TOP_K개 조회
     # 연방법 + 주법 통합 검색: 선택한 country_id를 [주 + 연방]으로 확장
     jurisdiction_ids = await resolve_jurisdiction_ids(country_id, db)
     logger.info("검색 대상 country_id 목록: %s", jurisdiction_ids)
@@ -285,18 +222,12 @@ async def retrieve_laws(
     law_ids = []
 
     for row in rows:
-        law = row[0]  # Law 객체 (법률 데이터)
-        distance = row[1]  # L2 거리 값 (0에 가까울수록 유사)
+        law = row[0]
+        distance = row[1]  # L2 거리 (0에 가까울수록 유사)
 
-        # Step 3: 임계값 필터링
-        # TOP_K개를 가져왔더라도, 거리가 임계값(0.85)보다 크면
-        # 관련성이 낮다고 판단하여 제외합니다.
-        # 예: 거리 0.72 → 유효 (0.72 ≤ 0.85) ✅
-        #     거리 0.91 → 제외 (0.91 > 0.85) ❌
+        # Step 3: 임계값 필터링 — 임계값보다 먼 문서는 관련성 낮음으로 제외
         if distance <= MAX_DISTANCE_THRESHOLD:
-            # Step 4: LangChain Document 형식으로 변환
-            # - page_content: 법률 본문 텍스트 (프롬프트에 삽입될 내용)
-            # - metadata: 부가 정보 (법률 종류, 조항 번호, 거리 등)
+            # Step 4: LangChain Document로 변환
             doc = Document(
                 page_content=law.content,
                 metadata={
@@ -316,25 +247,13 @@ async def retrieve_laws(
 # =========================================================
 # 6. 컨텍스트 포맷 함수
 # =========================================================
-# 검색된 법률 Document들을 LLM 프롬프트에 삽입할 수 있는
-# 문자열(텍스트) 형태로 변환합니다.
-#
-# [포맷 예시]
-# [VEH 23152.]
-# - 목차: CHAPTER 1. Offenses and Penalties
-# - 내용: It is unlawful for a person who is under the influence...
-# --------------------------------------------------
-# [VEH 23153.]
-# - 목차: CHAPTER 1. Offenses and Penalties
-# - 내용: ...
 
 
 def format_docs(docs: List[Document]) -> str:
-    """
-    LangChain Document 리스트를 프롬프트에 삽입할 텍스트로 변환합니다.
+    """검색된 Document들을 프롬프트 삽입용 텍스트로 변환합니다.
 
-    각 문서를 [법률코드 조항번호] 헤더와 함께 목차, 내용을 포함하는
-    구조화된 텍스트로 포맷합니다. 구분선으로 문서 간 경계를 명확히 합니다.
+    포맷: [법률코드 조항번호] + 목차 + 내용, 문서 간 구분선.
+    예: "[VEH 23152.]\\n- 목차: CHAPTER 1. ...\\n- 내용: It is unlawful..."
     """
     if not docs:
         return "(관련 법률 정보 없음)"
@@ -371,11 +290,8 @@ def _extract_text_from_ai_content(content: Any) -> str:
 
 
 # =========================================================
-# 7. [메인] RAG 답변 생성 함수
+# 7. [메인] RAG 답변 생성 함수 — API 엔드포인트의 진입점
 # =========================================================
-# 이 함수가 API 엔드포인트에서 호출되는 최종 진입점입니다.
-# 위에서 정의한 모든 컴포넌트(번역, 검색, 포맷, 프롬프트, LLM)를
-# 순차적으로 조합하여 최종 답변을 생성합니다.
 
 
 @traceable
@@ -401,28 +317,19 @@ async def generate_answer(
         }
     """
     logger.info("국가 필터링 적용: ID %s", country_id)
-    # ----- Step 0: 질문 재구성 (대화 맥락 반영) -----
-    # session_id가 있으면 이전 대화 기록을 참고하여 후속 질문을 독립적 질문으로 재구성
-    # 예: "그러면 벌금은?" → "캘리포니아 음주운전 DUI 벌금은?"
-    # session_id가 없으면 (None) 원본 질문을 그대로 사용
+    # Step 0: 질문 재구성 — session_id가 있으면 대화 맥락을 반영해
+    # 후속 질문을 독립 질문으로 재구성 (예: "그러면 벌금은?" → "캘리포니아 음주운전 벌금은?")
     search_query = query
     if session_id:
         search_query = await contextualize_question(query, session_id, llm)
 
-    # ----- Step 1: 질문 번역 (한국어 → 영어) -----
-    # 검색 정확도를 위해 질문을 영어로 번역합니다.
-    # 재구성된 질문(search_query)을 번역합니다.
-    # 원본 질문(query)은 보존하고, 최종 답변 생성에서 사용합니다.
+    # Step 1: 질문 번역 (한국어 → 영어, 검색용. 원본 질문은 답변 생성에 사용)
     translated_query = await translate_query(search_query)
 
-    # ----- Step 2: 벡터 검색 (번역된 질문으로) -----
-    # 영어로 번역된 질문을 임베딩하여 DB에서 유사한 법률 조항을 검색합니다.
+    # Step 2: 벡터 검색
     docs, law_ids = await retrieve_laws(translated_query, country_id, db)
 
-    # ----- Step 3: 검색 결과 검증 -----
-    # 임계값(0.85)을 통과한 유효한 문서가 없으면
-    # LLM을 호출하지 않고 바로 "검색 실패" 응답을 반환합니다.
-    # (불필요한 LLM 호출을 방지하여 비용과 응답 시간 절약)
+    # Step 3: 유효한 문서가 없으면 LLM 호출 없이 바로 "검색 실패" 응답 (비용/시간 절약)
     if not docs:
         return {
             "answer": "죄송합니다. 질문하신 내용과 관련된 정확한 법률 정보를 찾을 수 없습니다. (관련도 낮음)",
@@ -430,18 +337,10 @@ async def generate_answer(
             "search_success": False,
         }
 
-    # ----- Step 4: 컨텍스트 포맷 -----
-    # 검색된 Document 리스트를 프롬프트에 삽입할 텍스트로 변환합니다.
+    # Step 4: 컨텍스트 포맷
     context = format_docs(docs)
 
-    # ----- Step 5: LCEL 체인 실행 (답변 생성) -----
-    # LCEL(LangChain Expression Language) 파이프라인:
-    #   prompt | llm
-    #   (프롬프트 생성) → (LLM 호출)
-    #
-    # ※ 여기서는 번역본이 아닌 원본 질문(query)을 전달합니다.
-    #   이유: 사용자가 한국어로 질문했으면 한국어로 답변해야 하므로,
-    #         LLM에게는 원본 한국어 질문을 전달하여 답변 언어를 맞춥니다.
+    # Step 5: 답변 생성 — 번역본이 아닌 원본 질문(query)을 전달해 답변 언어를 맞춘다
     chain = CHAT_PROMPT | llm
 
     ai_response = await chain.ainvoke({"context": context, "question": query})
@@ -456,13 +355,10 @@ async def generate_answer(
 
     final_answer = _extract_text_from_ai_content(ai_response.content)
 
-    # ----- Step 6: 대화 기록 저장 -----
-    # session_id가 있으면 이번 질문/답변을 대화 기록에 추가
-    # 다음 요청에서 contextualize_question()이 이 기록을 참고합니다.
+    # Step 6: 대화 기록 저장 (다음 요청의 질문 재구성에 사용)
     if session_id:
         save_to_history(session_id, search_query, final_answer)
 
-    # ----- Step 7: 결과 반환 -----
     return {
         "answer": final_answer,
         "related_law_id_list": law_ids,

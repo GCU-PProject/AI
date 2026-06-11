@@ -2,16 +2,7 @@
 """
 법률 Q&A API의 요청/응답 스키마
 
-Pydantic 모델을 사용하여 API의 요청(Request)과 응답(Response) 형식을 정의합니다.
-
-[Pydantic이란?]
-Python의 데이터 검증 라이브러리입니다.
-- 타입이 맞지 않으면 자동으로 에러를 발생시킵니다.
-  예: country_id에 문자열 "abc"가 오면 → 422 Unprocessable Entity 에러
-- FastAPI와 연동되어 Swagger 문서(/docs)에 자동으로 요청/응답 형식이 표시됩니다.
-
-[사용되는 곳]
-- ChatRequest: POST /api/qna의 요청 본문(body)
+- ChatRequest: POST /api/qna의 요청 본문
 - ChatResult: CommonResponse의 result 필드에 들어가는 응답 데이터
 """
 
@@ -24,7 +15,7 @@ from typing import List, Optional
 # ---------------------------------------------------
 class ChatRequest(BaseModel):
     query: str  # 사용자의 법률 질문 (예: "음주운전 하면 면허가 정지되나요?")
-    country_id: int  # 검색 대상 국가 ID (예: 1: California, 2: New York)
+    country_id: int  # 검색 대상 국가 ID (예: 2=California, 3=New York)
 
     # 대화 세션 ID (대화 맥락 기억 기능용)
     # - 프론트엔드에서 UUID를 생성하여 전달합니다.

@@ -1,4 +1,4 @@
-# src/models/raw.py
+# src/models/law.py
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
@@ -22,8 +22,9 @@ class Law(Base):
     [데이터 예시]
     | law_id | country_id | law_type | article_no | content               |
     |--------|-----------|----------|------------|------------------------|
-    | 68722  | 1         | VEH      | 23152.     | It is unlawful for...  |
-    | 68724  | 1         | VEH      | 23153.     | Any person who...      |
+    | 68722  | 2         | VEH      | 23152.     | It is unlawful for...  |
+    | 68724  | 2         | VEH      | 23153.     | Any person who...      |
+    (country_id=2: 캘리포니아 — countries 테이블 참고)
     """
 
     __tablename__ = "laws"

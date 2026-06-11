@@ -12,8 +12,8 @@ Ragas 0.4.x 프레임워크로 자동 채점하여 시스템 성능을 측정합
 
 [결과 저장 구조]
     data/eval_results/
-    ├── eval_history.csv                ← 실행 이력 (한 줄씩 추가)
-    └── latency_history.csv             ← 실제 응답시간 이력 (한 줄씩 추가)
+    ├── eval_history_30.csv             ← 실행 이력 (한 줄씩 추가)
+    └── latency_history_30.csv          ← 실제 응답시간 이력 (한 줄씩 추가)
 """
 
 import argparse
@@ -36,6 +36,7 @@ setup_langsmith()
 from src.core.config import settings
 from src.core.database import AsyncSessionLocal
 from src.core.llm import embeddings  # 자체 호스팅 Qwen3 (RemoteEmbeddings)
+from src.scripts.eval_common import find_metric_column
 from src.scripts.eval_latency import LatencyRecord, append_latency_history
 from src.services.chat_service import (
     CHAT_PROMPT,
@@ -76,21 +77,6 @@ EVAL_HISTORY_PATH = os.path.join(EVAL_RESULTS_DIR, "eval_history_30.csv")
 #   (리걸벤치 기준 법률 분야 정확도가 더 높다고 판단해 채점 기준으로 채택)
 #   (이유는 아래 eval_llm 설명 참고)
 EVAL_LLM_MODEL = "gemini-3-flash-preview"
-
-
-def find_metric_column(df: pd.DataFrame, metric_name: str) -> str:
-    """RAGAS 버전에 따라 metric_name 또는 metric_name(...) 형태로 저장된 컬럼을 찾는다."""
-    candidates = [
-        col
-        for col in df.columns
-        if col == metric_name or col.startswith(f"{metric_name}(")
-    ]
-    if not candidates:
-        raise KeyError(
-            f"RAGAS 결과에서 '{metric_name}' 컬럼을 찾지 못했습니다. "
-            f"실제 컬럼: {list(df.columns)}"
-        )
-    return candidates[0]
 
 
 # =========================================================
