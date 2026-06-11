@@ -40,9 +40,11 @@ from src.scripts.eval_common import find_metric_column
 from src.scripts.eval_latency import LatencyRecord, append_latency_history
 from src.services.chat_service import (
     CHAT_PROMPT,
+    _extract_text_from_ai_content,
     format_docs,
     llm,
     retrieve_laws,
+    rewrite_for_search,
     translate_query,
 )
 
@@ -50,7 +52,6 @@ from src.services.chat_service import (
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = settings.GOOGLE_APPLICATION_CREDENTIALS
 
 from datasets import Dataset
-from langchain_core.output_parsers import StrOutputParser
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langsmith import traceable
 from ragas import evaluate
@@ -68,7 +69,7 @@ from ragas.run_config import RunConfig
 # 1. 설정값
 # =========================================================
 # 평가에 사용할 검수 완료 데이터셋
-TESTSET_CSV_PATH = "data/ragas_testset_2.csv"
+TESTSET_CSV_PATH = "data/ragas_testset_casual.csv"
 
 EVAL_RESULTS_DIR = "data/eval_results"
 EVAL_HISTORY_PATH = os.path.join(EVAL_RESULTS_DIR, "eval_history_30.csv")
@@ -133,13 +134,20 @@ async def generate_rag_answer(
     translated_query = await translate_query(query)
     translation_time = time.perf_counter() - started_at
 
-    # Step 2: 벡터 검색
+    # Step 2: 검색 쿼리 리라이팅 (RAG_ENABLE_REWRITE=True 시 활성화)
     started_at = time.perf_counter()
-    docs, _law_ids = await retrieve_laws(translated_query, country_id, db)
+    search_query = translated_query
+    if settings.RAG_ENABLE_REWRITE:
+        search_query = await rewrite_for_search(translated_query)
+    rewrite_time = time.perf_counter() - started_at
+
+    # Step 3: 벡터 검색
+    started_at = time.perf_counter()
+    docs, _law_ids = await retrieve_laws(search_query, country_id, db)
     retrieval_time = time.perf_counter() - started_at
     contexts_text = [doc.page_content for doc in docs]
 
-    # Step 3: 검색 결과 없으면 기본 답변
+    # Step 4: 검색 결과 없으면 기본 답변
     if not docs:
         total_time = time.perf_counter() - total_started_at
         return (
@@ -147,6 +155,7 @@ async def generate_rag_answer(
             [],
             {
                 "translation": translation_time,
+                "rewrite": rewrite_time,
                 "retrieval": retrieval_time,
                 "generation": 0.0,
                 "total": total_time,
@@ -154,12 +163,13 @@ async def generate_rag_answer(
             },
         )
 
-    # Step 4: 답변 생성
+    # Step 5: 답변 생성
     context = format_docs(docs)
-    chain = CHAT_PROMPT | llm | StrOutputParser()
+    chain = CHAT_PROMPT | llm
     started_at = time.perf_counter()
-    answer = await chain.ainvoke({"context": context, "question": query})
+    ai_response = await chain.ainvoke({"context": context, "question": query})
     generation_time = time.perf_counter() - started_at
+    answer = _extract_text_from_ai_content(ai_response.content)
     total_time = time.perf_counter() - total_started_at
 
     return (
@@ -167,6 +177,7 @@ async def generate_rag_answer(
         contexts_text,
         {
             "translation": translation_time,
+            "rewrite": rewrite_time,
             "retrieval": retrieval_time,
             "generation": generation_time,
             "total": total_time,

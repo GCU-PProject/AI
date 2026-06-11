@@ -16,6 +16,7 @@ LATENCY_HISTORY_COLUMNS = [
     "성공수",
     "실패수",
     "평균번역시간(초)",
+    "평균리라이팅시간(초)",
     "평균검색시간(초)",
     "평균답변생성시간(초)",
     "평균총응답시간(초)",
@@ -28,6 +29,7 @@ LATENCY_HISTORY_COLUMNS = [
 
 class LatencyRecord(TypedDict):
     translation: float
+    rewrite: float
     retrieval: float
     generation: float
     total: float
@@ -52,6 +54,7 @@ def append_latency_history(
         total_times = successful_df["total"]
         latency_stats = {
             "평균번역시간(초)": round(successful_df["translation"].mean(), 4),
+            "평균리라이팅시간(초)": round(successful_df["rewrite"].mean(), 4) if "rewrite" in successful_df.columns else None,
             "평균검색시간(초)": round(successful_df["retrieval"].mean(), 4),
             "평균답변생성시간(초)": round(successful_df["generation"].mean(), 4),
             "평균총응답시간(초)": round(total_times.mean(), 4),
@@ -63,6 +66,7 @@ def append_latency_history(
     else:
         latency_stats = {
             "평균번역시간(초)": None,
+            "평균리라이팅시간(초)": None,
             "평균검색시간(초)": None,
             "평균답변생성시간(초)": None,
             "평균총응답시간(초)": None,
@@ -83,6 +87,18 @@ def append_latency_history(
     }
 
     os.makedirs(os.path.dirname(LATENCY_HISTORY_PATH), exist_ok=True)
+
+    # 기존 파일의 컬럼과 현재 컬럼이 다르면 헤더째로 마이그레이션
+    if os.path.exists(LATENCY_HISTORY_PATH) and os.path.getsize(LATENCY_HISTORY_PATH) > 0:
+        existing_df = pd.read_csv(LATENCY_HISTORY_PATH, encoding="utf-8-sig")
+        existing_cols = list(existing_df.columns)
+        if existing_cols != LATENCY_HISTORY_COLUMNS:
+            for col in LATENCY_HISTORY_COLUMNS:
+                if col not in existing_df.columns:
+                    existing_df[col] = None
+            existing_df = existing_df[LATENCY_HISTORY_COLUMNS]
+            existing_df.to_csv(LATENCY_HISTORY_PATH, index=False, encoding="utf-8-sig")
+
     needs_header = (
         not os.path.exists(LATENCY_HISTORY_PATH)
         or os.path.getsize(LATENCY_HISTORY_PATH) == 0

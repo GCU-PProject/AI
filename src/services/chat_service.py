@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional
 
 from google.cloud import translate_v3
 from langchain_core.documents import Document
+from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate, load_prompt
 from langsmith import traceable
 from sqlalchemy import select
@@ -98,7 +99,32 @@ async def translate_query(query: str) -> str:
 
 
 # =========================================================
-# 4. RAG 프롬프트 템플릿 (답변 생성용)
+# 4. 검색 쿼리 리라이팅 (RAG_ENABLE_REWRITE=True 시 활성화)
+# =========================================================
+# 번역된 자연어 질문을 법률 검색 키워드로 변환해 벡터 검색 정확도를 높인다.
+# 예) "What happens if you use marijuana?"
+#   → "marijuana cannabis possession penalty Health and Safety Code"
+
+rewrite_yaml = load_prompt("src/prompts/rewrite.yaml", encoding="utf-8")
+REWRITE_PROMPT = ChatPromptTemplate.from_messages(
+    [("human", rewrite_yaml.template)]
+)
+
+
+@traceable
+async def rewrite_for_search(query: str) -> str:
+    """번역된 질문을 법률 검색 키워드로 변환합니다."""
+    chain = REWRITE_PROMPT | llm | StrOutputParser()
+    rewritten = await chain.ainvoke({"question": query})
+    rewritten = rewritten.strip()
+    if not rewritten:
+        return query
+    logger.info("리라이팅: '%s' → '%s'", query, rewritten)
+    return rewritten
+
+
+# =========================================================
+# 5. RAG 프롬프트 템플릿 (답변 생성용)
 # =========================================================
 # 설계 핵심: ① 근거 자료만 사용 + 관련 없으면 답변 불가 (할루시네이션 가드레일)
 # ② 결론→상세→참고 법령→면책 순의 형식 통일 ③ 법률 코드는 [참고 법령] 섹션에만 표기
@@ -326,10 +352,15 @@ async def generate_answer(
     # Step 1: 질문 번역 (한국어 → 영어, 검색용. 원본 질문은 답변 생성에 사용)
     translated_query = await translate_query(search_query)
 
-    # Step 2: 벡터 검색
-    docs, law_ids = await retrieve_laws(translated_query, country_id, db)
+    # Step 2: 검색 쿼리 리라이팅 (RAG_ENABLE_REWRITE=True 시 활성화)
+    search_query_final = translated_query
+    if settings.RAG_ENABLE_REWRITE:
+        search_query_final = await rewrite_for_search(translated_query)
 
-    # Step 3: 유효한 문서가 없으면 LLM 호출 없이 바로 "검색 실패" 응답 (비용/시간 절약)
+    # Step 3: 벡터 검색
+    docs, law_ids = await retrieve_laws(search_query_final, country_id, db)
+
+    # Step 4: 유효한 문서가 없으면 LLM 호출 없이 바로 "검색 실패" 응답 (비용/시간 절약)
     if not docs:
         return {
             "answer": "죄송합니다. 질문하신 내용과 관련된 정확한 법률 정보를 찾을 수 없습니다. (관련도 낮음)",
@@ -337,10 +368,10 @@ async def generate_answer(
             "search_success": False,
         }
 
-    # Step 4: 컨텍스트 포맷
+    # Step 5: 컨텍스트 포맷
     context = format_docs(docs)
 
-    # Step 5: 답변 생성 — 번역본이 아닌 원본 질문(query)을 전달해 답변 언어를 맞춘다
+    # Step 6: 답변 생성 — 번역본이 아닌 원본 질문(query)을 전달해 답변 언어를 맞춘다
     chain = CHAT_PROMPT | llm
 
     ai_response = await chain.ainvoke({"context": context, "question": query})
@@ -355,7 +386,7 @@ async def generate_answer(
 
     final_answer = _extract_text_from_ai_content(ai_response.content)
 
-    # Step 6: 대화 기록 저장 (다음 요청의 질문 재구성에 사용)
+    # Step 7: 대화 기록 저장 (다음 요청의 질문 재구성에 사용)
     if session_id:
         save_to_history(session_id, search_query, final_answer)
 

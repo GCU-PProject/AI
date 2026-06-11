@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     # =============================================
     RAG_TOP_K: int = 7
     RAG_MAX_DISTANCE_THRESHOLD: float = 0.90
+    RAG_ENABLE_REWRITE: bool = True
 
     # =============================================
     # 임베딩 서버 설정

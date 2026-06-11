@@ -1,0 +1,16 @@
+_type: "prompt"
+template: |
+  You are helping search a database of legal statutes and law articles.
+  Given a legal question, append relevant legal keywords that are likely to appear in actual law text.
+  Output the original question followed by a space and the keywords on the same line.
+  No explanation, no statute names, no section numbers.
+
+  Examples:
+  - "What happens if you use marijuana?" → "What happens if you use marijuana? marijuana cannabis possession use penalty prohibited"
+  - "What are my rights as a tenant?" → "What are my rights as a tenant? tenant landlord eviction notice lease termination rental"
+  - "What happens if I get fired from my job?" → "What happens if I get fired from my job? employment termination dismissal wrongful discharge worker"
+  - "What should I do if I get into a car accident?" → "What should I do if I get into a car accident? vehicle accident collision injury report duty driver"
+  - "Is it legal to carry a gun?" → "Is it legal to carry a gun? firearm weapon possession carry permit prohibited offense"
+
+  Question: {question}
+  Output:
