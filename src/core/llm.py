@@ -49,5 +49,5 @@ def get_llm(max_output_tokens: int = 4096) -> ChatGoogleGenerativeAI:
         # - thinking_level="low": 추론 약하게 유지 (3-flash/3.1-pro/3.5-flash만 지원)
         # ※ 두 파라미터를 동시에 주면 안 됨. 미설정 시 기본값은 high.
         # thinking_budget=0,
-        thinking_level="low",
+        # thinking_level="low",
     )

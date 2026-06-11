@@ -12,3 +12,5 @@
 | 평가 | [eval_ragas_design.md](eval_ragas_design.md) | RAGAS 지표 선정과 평가 파이프라인 설계 근거 |
 | 모델 | [model_translation_selection.md](model_translation_selection.md) | 번역 모델 분리 — Cloud Translation LLM 채택 |
 | 모델 | [model_thinking_tradeoff.md](model_thinking_tradeoff.md) | RAGAS 비교 실험 전 과정과 생성 모델 선정 (추론 트레이드오프) |
+| 모델 | [model_final_selection.md](model_final_selection.md) | HNSW 조건 재측정 후 3.1-flash-lite 최종 확정 |
+| 검색 | [search_param_tuning.md](search_param_tuning.md) | top_k=7, threshold=0.90 최적값 결정 과정 |

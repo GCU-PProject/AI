@@ -7,6 +7,7 @@
 
 사용: from src.core.config import settings → settings.DB_HOST
 """
+
 import os
 
 from pydantic_settings import BaseSettings
@@ -45,7 +46,7 @@ class Settings(BaseSettings):
     # =============================================
     # RAG 검색 설정
     # =============================================
-    RAG_TOP_K: int = 5
+    RAG_TOP_K: int = 7
     RAG_MAX_DISTANCE_THRESHOLD: float = 0.90
 
     # =============================================

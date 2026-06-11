@@ -26,7 +26,7 @@ load_dotenv()
 # ==========================================
 TEST_QUERY = "Is it okay to drink alcohol in California?"
 TEST_COUNTRY_ID = 2  # 1=미국연방, 2=캘리포니아, 3=뉴욕, 4=캐나다연방, 5=온타리오, 6=BC
-TEST_LIMIT = 100  # 상위 몇 개까지 볼 것인지 (Top-K보다 넉넉하게 설정)
+TEST_LIMIT = 30  # 상위 몇 개까지 볼 것인지 (Top-K보다 넉넉하게 설정)
 # ==========================================
 
 
