@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     # RAG 검색 설정
     # =============================================
     RAG_TOP_K: int = 7
-    RAG_MAX_DISTANCE_THRESHOLD: float = 0.90
+    RAG_MAX_DISTANCE_THRESHOLD: float = 0.95
     RAG_ENABLE_REWRITE: bool = True
 
     # =============================================

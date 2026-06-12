@@ -20,3 +20,7 @@
 2026-06-11 22:03,rag_gemini3.1lite_rewrite,0.9333,0.7643,0.7478,0.4983
 2026-06-11 22:53,rag_gemini3.1lite_casual,0.8056,0.7162,0.7169,0.37
 2026-06-11 23:19,rag_gemini3.1lite_rewrite_casual,0.7889,0.8253,0.7616,0.332
+2026-06-12 02:25,rag_gemini3.1lite_rewrite_casual_k7_t95,0.8222,0.8163,0.8057,0.3433
+2026-06-12 09:35,rag_gemini3.1lite_casual_k7_t95,0.8056,0.7098,0.7254,0.3527
+2026-06-12 10:05,rag_gemini3.5flash_casual_k7_t95,0.8056,0.7128,0.7141,0.316
+2026-06-12 10:32,rag_gemini3.5flash_rewrite_casual_k7_t95,0.7722,0.746,0.8098,0.3167
