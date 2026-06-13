@@ -2,7 +2,7 @@
 법률 출처 조회 API 엔드포인트
 
 [엔드포인트 목록]
-POST /api/law_url → 법률 ID 목록으로 출처 URL 등 참조 정보 조회
+POST /api/law-url → 법률 ID 목록으로 출처 URL 등 참조 정보 조회
                     (qna 응답의 related_law_id_list를 그대로 전달)
 """
 
@@ -22,7 +22,7 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-@router.post("/law_url", response_model=CommonResponse)
+@router.post("/law-url", response_model=CommonResponse)
 async def get_laws_endpoint(request: LawUrlRequest, db: AsyncSession = Depends(get_db)):
     """
     법률 ID 목록으로 출처 URL 등 참조 정보를 조회합니다.

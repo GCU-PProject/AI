@@ -209,7 +209,7 @@ Content-Type: application/json
 }
 ```
 
-## 3. 법률 출처 조회 (/api/law_url) POST
+## 3. 법률 출처 조회 (/api/law-url) POST
 
 # Header
 

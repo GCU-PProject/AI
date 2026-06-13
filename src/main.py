@@ -9,7 +9,7 @@ FastAPI 앱의 진입점
 /api/qna           → 법률 Q&A
 /api/compare       → 법률 비교
 /api/risk          → 리스크 카드 조회
-/api/law_url       → 법률 ID로 출처 URL 조회
+/api/law-url       → 법률 ID로 출처 URL 조회
 """
 
 from src.core.observability import setup_langsmith
