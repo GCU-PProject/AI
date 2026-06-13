@@ -2,8 +2,8 @@
 법률 출처 조회 API 엔드포인트
 
 [엔드포인트 목록]
-POST /api/laws → 법률 ID 목록으로 출처 URL 등 참조 정보 조회
-                 (qna 응답의 related_law_id_list를 그대로 전달)
+POST /api/law_url → 법률 ID 목록으로 출처 URL 등 참조 정보 조회
+                    (qna 응답의 related_law_id_list를 그대로 전달)
 """
 
 import logging
@@ -41,11 +41,20 @@ async def get_laws_endpoint(request: LawUrlRequest, db: AsyncSession = Depends(g
             result=result_data,
         )
 
-    except (ConnectionError, SQLAlchemyError):
+    except (ConnectionError, SQLAlchemyError) as e:
+        logger.error(f"데이터베이스 오류: {str(e)}")
         return error_response(
             status=503,
             code="AI_DB_CONNECTION_FAILED",
             message="데이터베이스 연결에 실패했습니다.",
+        )
+
+    except ValueError as e:
+        logger.error(f"법률 조회 실패: {str(e)}")
+        return error_response(
+            status=400,
+            code="AI_RETRIEVAL_FAILED",
+            message="법률 조회 처리 중 오류가 발생했습니다.",
         )
 
     except Exception:

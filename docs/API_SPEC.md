@@ -277,6 +277,19 @@ Content-Type: application/json
 }
 ```
 
+# Response[400] - 법률 조회 처리 오류
+
+```json
+{
+  "success": false,
+  "status": 400,
+  "code": "AI_RETRIEVAL_FAILED",
+  "message": "법률 조회 처리 중 오류가 발생했습니다.",
+  "timestamp": "2026-03-28T12:37:15.000000+00:00",
+  "result": null
+}
+```
+
 # Response[503] - DB 연결 오류
 
 ```json

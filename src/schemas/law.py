@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 class LawUrlRequest(BaseModel):
     # qna 응답의 related_law_id_list를 그대로 넣으면 됩니다.
     law_id_list: List[int] = Field(
-        ..., description="법률 ID 목록 (예: [68722, 68724])"
+        ..., min_length=1, description="법률 ID 목록 (예: [68722, 68724])"
     )
 
 
