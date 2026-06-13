@@ -228,6 +228,44 @@ Content-Type: application/json
 }
 ```
 
+# Request 필드 허용 값
+
+리스크 카드는 아래 값들의 조합 단위로 사전 생성되어 있습니다.
+**아래 목록에 없는 값을 보내면 404 (AI_RISK_NOT_FOUND)가 반환됩니다.** (대소문자 구분, 정확히 일치해야 함)
+
+### travel_purpose (체류 목적)
+
+| 값 | 의미 |
+| --- | --- |
+| `tourism` | 관광 |
+| `business` | 출장 · 비즈니스 |
+| `study` | 유학 |
+| `work` | 취업 |
+| `working_holiday` | 워킹홀리데이 |
+
+### visa_type (비자 유형)
+
+| 값 | 의미 |
+| --- | --- |
+| `short_stay` | 단기 체류 (무비자 · 관광비자 등) |
+| `long_stay` | 장기 체류 |
+| `work_permit` | 취업 허가 |
+| `student_visa` | 학생 비자 |
+
+### age_band (연령대)
+
+| 값 | 의미 |
+| --- | --- |
+| `10s` | 10대 |
+| `20s` | 20대 |
+| `30s` | 30대 |
+| `40s` | 40대 |
+| `50s_plus` | 50대 이상 |
+
+> 값 목록의 원본은 `src/scripts/data_risk_generate_cards.py`의
+> `TRAVEL_PURPOSES` / `VISA_TYPES` / `AGE_BANDS` 상수입니다.
+> 값이 변경되면 카드 재생성과 이 문서 갱신이 함께 필요합니다.
+
 # Response[200]
 
 ```json

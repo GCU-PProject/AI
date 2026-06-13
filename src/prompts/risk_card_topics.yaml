@@ -84,7 +84,7 @@ template: |
 
   [
     {{
-      "risk_title": "일반 과자처럼 진열된 대마초 식품을 몰약 간식으로 알고 구매하여 섭취하면 한국 마약법으로 처벌될 수 있음",
+      "risk_title": "일반 과자처럼 진열된 대마초 식품을 일반 간식으로 알고 구매하여 섭취하면 한국 마약법으로 처벌될 수 있음",
       "risk_level": "HIGH",
       "search_query": "cannabis edible food product sale regulation California marijuana Korean law abroad"
     }},

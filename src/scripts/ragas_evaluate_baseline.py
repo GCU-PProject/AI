@@ -58,7 +58,7 @@ from ragas.run_config import RunConfig
 # 1. 설정값 (RAG 버전과 동일하게 맞춤)
 # =========================================================
 # 평가에 사용할 검수 완료 데이터셋
-TESTSET_CSV_PATH = "data/ragas_testset_2.csv"
+TESTSET_CSV_PATH = "data/ragas_testset_casual.csv"
 
 EVAL_RESULTS_DIR = "data/eval_results"
 EVAL_HISTORY_PATH = os.path.join(EVAL_RESULTS_DIR, "eval_history_30.csv")
