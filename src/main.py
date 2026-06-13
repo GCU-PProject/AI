@@ -9,6 +9,7 @@ FastAPI 앱의 진입점
 /api/qna           → 법률 Q&A
 /api/compare       → 법률 비교
 /api/risk          → 리스크 카드 조회
+/api/law_url       → 법률 ID로 출처 URL 조회
 """
 
 from src.core.observability import setup_langsmith
@@ -25,7 +26,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from src.api.endpoint import chat, compare, risk
+from src.api.endpoint import chat, compare, law, risk
 from src.core.config import settings
 
 logging.basicConfig(level=logging.INFO)
@@ -51,10 +52,11 @@ app.add_middleware(
 # - prefix: URL 앞에 붙는 경로 (예: /api/qna)
 # - tags: Swagger 문서에서 그룹핑할 이름
 
-# 라우터: /api/qna, /api/compare, /api/risk
+# 라우터: /api/qna, /api/compare, /api/risk, /api/laws
 app.include_router(chat.router, prefix="/api", tags=["Chat API"])
 app.include_router(compare.router, prefix="/api", tags=["Compare API"])
 app.include_router(risk.router, prefix="/api", tags=["Risk API"])
+app.include_router(law.router, prefix="/api", tags=["Law API"])
 
 
 # =========================================================

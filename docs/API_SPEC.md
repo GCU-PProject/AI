@@ -209,7 +209,101 @@ Content-Type: application/json
 }
 ```
 
-## 3. 리스크 (/api/risk) POST
+## 3. 법률 출처 조회 (/api/law_url) POST
+
+# Header
+
+```bash
+Content-Type: application/json
+```
+
+# Request Body
+
+```json
+{
+  "law_id_list": [105, 209]
+}
+```
+
+> `qna` 응답의 `related_law_id_list`를 그대로 전달하면 됩니다.
+
+# Response[200] - 성공
+
+```json
+{
+  "success": true,
+  "status": 200,
+  "code": "SUCCESS",
+  "message": "법률 출처 조회 성공입니다.",
+  "timestamp": "2026-03-28T12:37:00.000000+00:00",
+  "result": [
+    {
+      "law_id": 105,
+      "law_type": "VEH",
+      "article_no": "23152.",
+      "section_title": "Driving Under the Influence",
+      "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=VEH&sectionNum=23152."
+    },
+    {
+      "law_id": 209,
+      "law_type": "PEN",
+      "article_no": "647.",
+      "section_title": "Disorderly Conduct",
+      "source_url": null
+    }
+  ]
+}
+```
+
+필드 설명:
+
+- `law_id_list`: 조회할 법률 ID 목록 (필수). 입력 순서대로 반환됩니다.
+- `law_type`: 법률 코드 (예: `VEH`, `PEN`). 없으면 빈 문자열.
+- `article_no`: 조항 번호 (예: `23152.`). 없으면 빈 문자열.
+- `section_title`: 목차/카테고리명. 없으면 빈 문자열.
+- `source_url`: 법령 원문 출처 URL. 없으면 `null`.
+- DB에 존재하지 않는 ID는 결과에서 제외됩니다 (오류 아님).
+
+# Response[400] - 요청 오류
+
+```json
+{
+  "success": false,
+  "status": 400,
+  "code": "COMMON400",
+  "message": "요청 처리 중 오류 : 필수 입력값(law_id_list)을 확인해주세요.",
+  "timestamp": "2026-03-28T12:37:10.000000+00:00",
+  "result": null
+}
+```
+
+# Response[503] - DB 연결 오류
+
+```json
+{
+  "success": false,
+  "status": 503,
+  "code": "AI_DB_CONNECTION_FAILED",
+  "message": "데이터베이스 연결에 실패했습니다.",
+  "timestamp": "2026-03-28T12:37:20.000000+00:00",
+  "result": null
+}
+```
+
+# Response[500] - 서버 오류
+
+```json
+{
+  "success": false,
+  "status": 500,
+  "code": "COMMON500",
+  "message": "서버 내부 오류가 발생했습니다.",
+  "timestamp": "2026-03-28T12:37:30.000000+00:00",
+  "result": null
+}
+```
+
+## 4. 리스크 (/api/risk) POST
 
 # Header
 
